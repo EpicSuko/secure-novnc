@@ -1,9 +1,6 @@
 package com.suko.vnc.websocket;
 
-import java.io.IOException;
-import java.net.Socket;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -22,8 +19,10 @@ import io.quarkus.websockets.next.OnTextMessage;
 import io.quarkus.websockets.next.PathParam;
 import io.quarkus.websockets.next.WebSocket;
 import io.quarkus.websockets.next.WebSocketConnection;
-import io.smallrye.mutiny.Uni;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.net.NetClient;
+import io.vertx.core.net.NetSocket;
+import io.vertx.mutiny.core.Vertx;
 import jakarta.inject.Inject;
 
 @WebSocket(path = "/websockify/{sessionId}")
@@ -34,24 +33,26 @@ public class VNCWebSocketProxy {
     @Inject
     VNCAuthService authService;
     
+    @Inject
+    Vertx vertx;
+    
     @ConfigProperty(name = "vnc.server.host", defaultValue = "localhost")
     String vncServerHost;
     
     @ConfigProperty(name = "vnc.server.port", defaultValue = "5901")
     int vncServerPort;
-    
+
     // Store active WebSocket connections with their VNC sockets
     private final Map<String, VNCConnection> activeConnections = new ConcurrentHashMap<>();
     
     public static class VNCConnection {
         public WebSocketConnection webSocketConnection;
-        public Socket vncSocket;
+        public NetSocket vncSocket;
         public VNCAuthService.VNCSession authSession;
         public boolean isConnected = false;
         public long bytesReceived = 0;
         public long bytesSent = 0;
         public long connectionStartTime;
-        public CompletableFuture<Void> forwardingTask;
         
         public VNCConnection(WebSocketConnection webSocketConnection, VNCAuthService.VNCSession authSession) {
             this.webSocketConnection = webSocketConnection;
@@ -68,185 +69,132 @@ public class VNCWebSocketProxy {
             return System.currentTimeMillis() - connectionStartTime;
         }
     }
-    
+
     @OnOpen
-    public Uni<Void> onOpen(WebSocketConnection connection, @PathParam String sessionId) {
-        return Uni.createFrom().item(() -> {
-            log.info("🔗 WebSocket connection opened for session: {}", sessionId);
+    public void onOpen(WebSocketConnection connection, @PathParam String sessionId) {
+        log.info("WebSocket connection opened id {} for session: {}", connection.id(), sessionId);
+
+        VNCAuthService.VNCSession vncSession = authService.getSession(sessionId);
             
-            // Validate session first
-            VNCAuthService.VNCSession vncSession = authService.getSession(sessionId);
-            
-            if (vncSession == null) {
-                log.warn("❌ Invalid or expired session: {}", sessionId);
-                connection.closeAndAwait(new CloseReason(WebSocketCloseStatus.ENDPOINT_UNAVAILABLE.code(), "Invalid or expired session"));
-                return null;
-            }
-            
-            try {
-                // Create connection to actual VNC server
-                log.info("🖥️ Connecting to VNC server: {}:{}", vncServerHost, vncServerPort);
-                Socket vncSocket = new Socket(vncServerHost, vncServerPort);
-                vncSocket.setTcpNoDelay(true); // Important for VNC performance
-                vncSocket.setKeepAlive(true);
-                vncSocket.setSoTimeout(30000); // 30 second timeout
-                
+        if (vncSession == null) {
+            log.warn("❌ Invalid or expired session: {}", sessionId);
+            connection.closeAndAwait(new CloseReason(WebSocketCloseStatus.ENDPOINT_UNAVAILABLE.code(), "Invalid or expired session"));
+            return;
+        }
+        
+        NetClient netClient = vertx.getDelegate().createNetClient();
+
+        netClient.connect(vncServerPort, vncServerHost)
+            .onSuccess(vncSocket -> {
                 VNCConnection vncConnection = new VNCConnection(connection, vncSession);
                 vncConnection.vncSocket = vncSocket;
-                vncConnection.isConnected = true;
-                
+                vncConnection.isConnected = true;    
                 activeConnections.put(sessionId, vncConnection);
-                
-                // Start bidirectional data forwarding
-                startDataForwarding(sessionId, vncConnection);
-                
-                log.info("✅ VNC proxy connection established for user: {} ({})", 
-                    vncSession.userId, sessionId);
-                
-            } catch (IOException e) {
-                log.error("❌ Failed to connect to VNC server {}:{}", vncServerHost, vncServerPort, e);
-                connection.closeAndAwait(new CloseReason(WebSocketCloseStatus.INTERNAL_SERVER_ERROR.code(), "Failed to connect to VNC server: " + e.getMessage()));
-            }
-            
-            return null;
-        });
+
+                log.info("Connected to VNC server: {}:{}", vncServerHost, vncServerPort);
+
+                vncSocket.handler(buffer -> {
+                    connection.sendBinary(buffer).subscribe().with(s -> { 
+                        vncConnection.updateStats(buffer.length(), 0);
+                    });
+                    logData("VNC->WebSocket", sessionId, buffer);
+                });
+
+                vncSocket.closeHandler(h -> {
+                    log.info("VNC server closed connection for session: {}", sessionId);
+                    closeConnection(sessionId, WebSocketCloseStatus.NORMAL_CLOSURE, "VNC server closed connection");
+                });
+
+            })
+            .onFailure(throwable -> {
+                connection.close(new CloseReason(WebSocketCloseStatus.INTERNAL_SERVER_ERROR.code(), "Failed to connect to VNC server: " + throwable.getMessage()));
+                log.error("Failed to connect to VNC server: {}:{}", vncServerHost, vncServerPort, throwable);
+            });
     }
-    
+
     @OnBinaryMessage
-    public Uni<Void> onBinaryMessage(Buffer message, WebSocketConnection connection, @PathParam String sessionId) {
-        return Uni.createFrom().item(() -> {
-            VNCConnection vncConnection = activeConnections.get(sessionId);
-            
-            if (vncConnection != null && vncConnection.isConnected && vncConnection.vncSocket != null) {
-                try {
-                    // Forward binary data from WebSocket client to VNC server
-                    byte[] bytes = message.getBytes();
-                    vncConnection.vncSocket.getOutputStream().write(bytes);
-                    vncConnection.vncSocket.getOutputStream().flush();
-                    
-                    vncConnection.updateStats(0, bytes.length);
-                    log.trace("📥 Forwarded {} bytes WebSocket->VNC", bytes.length);
-                    
-                } catch (IOException e) {
-                    log.warn("❌ Error forwarding WebSocket->VNC data for session {}: {}", 
-                        sessionId, e.getMessage());
-                    closeConnection(sessionId);
-                }
-            } else {
-                log.warn("⚠️ Received message for inactive connection: {}", sessionId);
-            }
-            
-            return null;
-        });
-    }
-    
-    @OnTextMessage
-    public Uni<Void> onTextMessage(String message, WebSocketConnection connection, @PathParam String sessionId) {
-        return Uni.createFrom().item(() -> {
-            // Text messages typically not used in VNC protocol, but log for debugging
-            log.debug("📨 Received text message for session {}: {}", sessionId, message);
-            return null;
-        });
-    }
-    
-    @OnClose
-    public Uni<Void> onClose(WebSocketConnection connection, @PathParam String sessionId) {
-        return Uni.createFrom().item(() -> {
-            log.info("🔌 WebSocket connection closed for session: {}", sessionId);
-            closeConnection(sessionId);
-            return null;
-        });
-    }
-    
-    @OnError
-    public Uni<Void> onError(WebSocketConnection connection, Throwable throwable, @PathParam String sessionId) {
-        return Uni.createFrom().item(() -> {
-            log.error("💥 WebSocket error for session {}: {}", sessionId, throwable.getMessage(), throwable);
-            closeConnection(sessionId);
-            return null;
-        });
-    }
-    
-    private void startDataForwarding(String sessionId, VNCConnection vncConnection) {
-        // Forward data from VNC server to WebSocket client using reactive approach
-        vncConnection.forwardingTask = CompletableFuture.runAsync(() -> {
-            log.debug("🔄 Starting VNC->WebSocket forwarding for session: {}", sessionId);
-            byte[] buffer = new byte[8192]; // Larger buffer for better performance
-            
+    public void onBinaryMessage(Buffer message, WebSocketConnection connection, @PathParam String sessionId) {
+        VNCConnection vncConnection = activeConnections.get(sessionId);
+
+        if (vncConnection != null && vncConnection.isConnected && vncConnection.vncSocket != null) {
             try {
-                while (vncConnection.isConnected && 
-                       vncConnection.vncSocket != null &&
-                       !vncConnection.vncSocket.isClosed() && 
-                       vncConnection.webSocketConnection.isOpen()) {
-                    
-                    int bytesRead = vncConnection.vncSocket.getInputStream().read(buffer);
-                    if (bytesRead > 0) {
-                        // Forward to WebSocket client using WebSockets Next API
-                        byte[] data = new byte[bytesRead];
-                        System.arraycopy(buffer, 0, data, 0, bytesRead);
-                        
-                        Buffer vertxBuffer = Buffer.buffer(data);
-                        vncConnection.webSocketConnection.sendBinaryAndAwait(vertxBuffer);
-                        
-                        vncConnection.updateStats(bytesRead, 0);
-                        log.trace("📤 Forwarded {} bytes VNC->WebSocket", bytesRead);
-                        
-                    } else if (bytesRead == -1) {
-                        log.info("📡 VNC server closed connection for session: {}", sessionId);
-                        break;
-                    }
-                }
-            } catch (IOException e) {
-                if (vncConnection.isConnected) {
-                    log.warn("❌ Error forwarding VNC->WebSocket data for session {}: {}", 
-                        sessionId, e.getMessage());
-                }
-            } catch (Exception e) {
-                log.error("💥 Unexpected error in data forwarding for session {}: {}", 
-                    sessionId, e.getMessage(), e);
-            } finally {
-                closeConnection(sessionId);
+                vncConnection.vncSocket.write(message);
+                vncConnection.updateStats(0, message.length());
+            } catch(Exception e) {
+                log.error("Failed to write to VNC socket", e);
+                closeConnection(sessionId, WebSocketCloseStatus.INTERNAL_SERVER_ERROR, "Failed to write to VNC socket: " + e.getMessage());
             }
-        });
+        }
+
+        logData("WebSocket->VNC", sessionId, message);
+    }
+
+    @OnTextMessage
+    public void onTextMessage(String message, WebSocketConnection connection, @PathParam String sessionId) {
+        VNCConnection vncConnection = activeConnections.get(sessionId);
+
+        if (vncConnection != null && vncConnection.isConnected && vncConnection.vncSocket != null) {
+            try {
+                vncConnection.vncSocket.write(Buffer.buffer(message.getBytes()));
+                vncConnection.updateStats(0, message.length());
+            } catch(Exception e) {
+                log.error("Failed to write to VNC socket", e);
+                closeConnection(sessionId, WebSocketCloseStatus.INTERNAL_SERVER_ERROR, "Failed to write to VNC socket: " + e.getMessage());
+            }
+        }
+
+        logData("WebSocket->VNC", sessionId, Buffer.buffer(message.getBytes()));
+    }
+
+    @OnClose
+    public void onClose(WebSocketConnection connection, @PathParam String sessionId) {
+        log.info("WebSocket connection closed for session: {}", sessionId);
+        closeConnection(sessionId, WebSocketCloseStatus.NORMAL_CLOSURE, "WebSocket connection closed");
+    }
+
+    @OnError
+    public void onError(WebSocketConnection connection, Throwable throwable, @PathParam String sessionId) {
+        log.error("WebSocket error for session: {}", sessionId, throwable);
+        closeConnection(sessionId, WebSocketCloseStatus.INTERNAL_SERVER_ERROR, "WebSocket error: " + throwable.getMessage());
     }
     
-    private void closeConnection(String sessionId) {
+    /**
+     * Clean up and close a VNC connection for the given session
+     * @param sessionId the session ID to close
+     * @param closeStatus the WebSocket close status to use
+     * @param reason the reason for closing
+     */
+    private void closeConnection(String sessionId, WebSocketCloseStatus closeStatus, String reason) {
         VNCConnection vncConnection = activeConnections.remove(sessionId);
         if (vncConnection != null) {
+            // Close the VNC connection
             vncConnection.isConnected = false;
-            
-            // Cancel forwarding task
-            if (vncConnection.forwardingTask != null && !vncConnection.forwardingTask.isDone()) {
-                vncConnection.forwardingTask.cancel(true);
-            }
-            
-            try {
-                if (vncConnection.vncSocket != null && !vncConnection.vncSocket.isClosed()) {
+            if(vncConnection.vncSocket != null) {
+                try {
                     vncConnection.vncSocket.close();
-                    log.debug("🔌 Closed VNC socket for session: {}", sessionId);
+                    vncConnection.vncSocket = null;
+                } catch(Exception e) {
+                    log.error("Failed to close VNC socket", e);
                 }
-            } catch (IOException e) {
-                log.warn("Error closing VNC socket for session {}: {}", sessionId, e.getMessage());
             }
-            
-            try {
-                if (vncConnection.webSocketConnection != null && vncConnection.webSocketConnection.isOpen()) {
-                    vncConnection.webSocketConnection.closeAndAwait();
-                    log.debug("🔌 Closed WebSocket for session: {}", sessionId);
+
+            // Close the WebSocket connection if it's still open
+            if(vncConnection.webSocketConnection != null) {
+                try {
+                    vncConnection.webSocketConnection.close(new CloseReason(closeStatus.code(), reason));
+                    vncConnection.webSocketConnection = null;
+                } catch(Exception e) {
+                    log.error("Failed to close WebSocket connection", e);
                 }
-            } catch (Exception e) {
-                log.warn("Error closing WebSocket for session {}: {}", sessionId, e.getMessage());
             }
-            
-            // Log connection statistics
-            long duration = vncConnection.getConnectionDuration();
-            log.info("📊 Connection stats for session {}: Duration={}ms, Received={}bytes, Sent={}bytes", 
-                sessionId, duration, vncConnection.bytesReceived, vncConnection.bytesSent);
-            
+
             // Update session activity
-            if (vncConnection.authSession != null) {
-                authService.getSession(sessionId); // This updates last activity
+            if(vncConnection.authSession != null) {
+                authService.getSession(sessionId);
             }
+
+            long duration = vncConnection.getConnectionDuration();
+            log.info("Connection stats for session {}: Duration={}ms, Received={}bytes, Sent={}bytes", sessionId, duration, vncConnection.bytesReceived, vncConnection.bytesSent);
         }
     }
     
@@ -257,5 +205,63 @@ public class VNCWebSocketProxy {
     
     public int getActiveConnectionCount() {
         return activeConnections.size();
+    }
+    
+    private void logData(String direction, String sessionId, Buffer buffer) {
+
+        boolean shouldLog = false;
+        if(!shouldLog) {
+            return;
+        }
+
+        try {
+            byte[] data = buffer.getBytes();
+            String hexDump = bytesToHex(data);
+            String ascii = bytesToAscii(data);
+            
+            log.info("{} [{}] {} bytes", direction, sessionId, data.length);
+            log.info("{} [{}] Hex: {}", direction, sessionId, hexDump);
+            log.info("{} [{}] ASCII: '{}'", direction, sessionId, ascii);
+            
+            // If it looks like text, also log it as string
+            if (isReadableText(data)) {
+                String text = buffer.toString();
+                log.info("{} [{}] Text: '{}'", direction, sessionId, text);
+            }
+            
+        } catch (Exception e) {
+            log.warn("Error logging data: {}", e.getMessage());
+        }
+    }
+    
+    private String bytesToHex(byte[] bytes) {
+        StringBuilder hex = new StringBuilder();
+        for (byte b : bytes) {
+            hex.append(String.format("%02x ", b));
+        }
+        return hex.toString().trim();
+    }
+    
+    private String bytesToAscii(byte[] bytes) {
+        StringBuilder ascii = new StringBuilder();
+        for (byte b : bytes) {
+            if (b >= 32 && b <= 126) { // Printable ASCII
+                ascii.append((char) b);
+            } else {
+                ascii.append('.');
+            }
+        }
+        return ascii.toString();
+    }
+    
+    private boolean isReadableText(byte[] bytes) {
+        int printableCount = 0;
+        for (byte b : bytes) {
+            if (b >= 32 && b <= 126) { // Printable ASCII
+                printableCount++;
+            }
+        }
+        // Consider it text if more than 70% is printable ASCII
+        return bytes.length > 0 && (printableCount * 100 / bytes.length) > 70;
     }
 }
