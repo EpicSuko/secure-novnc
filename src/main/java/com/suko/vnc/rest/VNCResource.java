@@ -129,7 +129,7 @@ public class VNCResource {
     private VNCTemplateData.VNCServerInfo getVNCServerInfo() {
         boolean isRunning = checkVNCServerStatus();
         return new VNCTemplateData.VNCServerInfo(
-            "localhost", "5900", "1280x1024", "testpass123", isRunning
+            "localhost", "5901", "1280x1024", "vncpassword", isRunning
         );
     }
     
@@ -180,7 +180,7 @@ public class VNCResource {
     private boolean checkVNCServerStatus() {
         try {
             java.net.Socket socket = new java.net.Socket();
-            socket.connect(new java.net.InetSocketAddress("localhost", 5900), 1000);
+            socket.connect(new java.net.InetSocketAddress("localhost", 5901), 1000);
             socket.close();
             return true;
         } catch (Exception e) {
