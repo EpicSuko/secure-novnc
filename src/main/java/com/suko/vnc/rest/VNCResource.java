@@ -7,9 +7,9 @@ import com.suko.vnc.model.VNCTemplateData;
 import com.suko.vnc.security.VNCAuthService;
 import com.suko.vnc.websocket.VNCWebSocketProxy;
 
-import io.quarkus.qute.Location;
-import io.quarkus.qute.Template;
-import io.quarkus.qute.TemplateInstance;
+// import io.quarkus.qute.Location;
+// import io.quarkus.qute.Template;
+// import io.quarkus.qute.TemplateInstance;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -28,95 +28,95 @@ public class VNCResource {
     @Inject
     VNCWebSocketProxy webSocketProxy;
     
-    @Inject
-    @Location("vncClient.qute.html")
-    Template vncClient;
+    // @Inject
+    // @Location("vncClient.qute.html")
+    // Template vncClient;
     
-    @Inject
-    @Location("vncConnect.qute.html")
-    Template vncConnect;
+    // @Inject
+    // @Location("vncConnect.qute.html")
+    // Template vncConnect;
     
-    @Inject
-    @Location("vncError.qute.html")
-    Template vncError;
+    // @Inject
+    // @Location("vncError.qute.html")
+    // Template vncError;
     
-    @GET
-    public TemplateInstance vncClient() {
-        return vncClient
-            .data("appInfo", getAppInfo())
-            .data("demoUsers", getDemoUsers())
-            .data("vncServer", getVNCServerInfo())
-            .data("proxyInfo", getProxyInfo());
-    }
+    // @GET
+    // public TemplateInstance vncClient() {
+    //     return vncClient
+    //         .data("appInfo", getAppInfo())
+    //         .data("demoUsers", getDemoUsers())
+    //         .data("vncServer", getVNCServerInfo())
+    //         .data("proxyInfo", getProxyInfo());
+    // }
     
-    @GET
-    @Path("/connect/{sessionId}")
-    public Response vncConnect(@PathParam("sessionId") String sessionId) {
-        // Validate session first
-        VNCAuthService.VNCSession session = authService.getSession(sessionId);
+    // @GET
+    // @Path("/connect/{sessionId}")
+    // public Response vncConnect(@PathParam("sessionId") String sessionId) {
+    //     // Validate session first
+    //     VNCAuthService.VNCSession session = authService.getSession(sessionId);
         
-        if (session == null) {
-            VNCTemplateData.ErrorInfo errorInfo = new VNCTemplateData.ErrorInfo(
-                "Session Not Found",
-                "Your session has expired or is invalid. Please authenticate again to access VNC.",
-                "SESSION_EXPIRED",
-                List.of(
-                    "Try logging in again with your credentials",
-                    "Check if your session expired (30 minute limit)",
-                    "Verify the VNC server is running",
-                    "Clear your browser cache and try again",
-                    "Contact administrator if problem persists"
-                ),
-                "/vnc"
-            );
+    //     if (session == null) {
+    //         VNCTemplateData.ErrorInfo errorInfo = new VNCTemplateData.ErrorInfo(
+    //             "Session Not Found",
+    //             "Your session has expired or is invalid. Please authenticate again to access VNC.",
+    //             "SESSION_EXPIRED",
+    //             List.of(
+    //                 "Try logging in again with your credentials",
+    //                 "Check if your session expired (30 minute limit)",
+    //                 "Verify the VNC server is running",
+    //                 "Clear your browser cache and try again",
+    //                 "Contact administrator if problem persists"
+    //             ),
+    //             "/vnc"
+    //         );
             
-            return Response.ok(
-                vncError
-                    .data("title", errorInfo.title)
-                    .data("message", errorInfo.message)
-                    .data("errorCode", errorInfo.errorCode)
-                    .data("suggestions", errorInfo.suggestions)
-                    .data("backUrl", errorInfo.backUrl)
-                    .data("timestamp", errorInfo.timestamp)
-            ).build();
-        }
+    //         return Response.ok(
+    //             vncError
+    //                 .data("title", errorInfo.title)
+    //                 .data("message", errorInfo.message)
+    //                 .data("errorCode", errorInfo.errorCode)
+    //                 .data("suggestions", errorInfo.suggestions)
+    //                 .data("backUrl", errorInfo.backUrl)
+    //                 .data("timestamp", errorInfo.timestamp)
+    //         ).build();
+    //     }
         
-        VNCTemplateData.SessionInfo sessionInfo = new VNCTemplateData.SessionInfo(
-            sessionId, session.userId, session.clientIP, 
-            session.createdAt, session.lastActivity, session.isExpired()
-        );
+    //     VNCTemplateData.SessionInfo sessionInfo = new VNCTemplateData.SessionInfo(
+    //         sessionId, session.userId, session.clientIP, 
+    //         session.createdAt, session.lastActivity, session.isExpired()
+    //     );
         
-        return Response.ok(
-            vncConnect
-                .data("sessionInfo", sessionInfo)
-                .data("vncServer", getVNCServerInfo())
-                .data("proxyInfo", getProxyInfo())
-        ).build();
-    }
+    //     return Response.ok(
+    //         vncConnect
+    //             .data("sessionInfo", sessionInfo)
+    //             .data("vncServer", getVNCServerInfo())
+    //             .data("proxyInfo", getProxyInfo())
+    //     ).build();
+    // }
     
-    @GET
-    @Path("/test-error")
-    public TemplateInstance testError() {
-        VNCTemplateData.ErrorInfo errorInfo = new VNCTemplateData.ErrorInfo(
-            "Test Error",
-            "This is a test error page to demonstrate the error template functionality.",
-            "TEST_ERROR",
-            List.of(
-                "This is just a test - no real error occurred",
-                "You can use this to verify error template styling",
-                "Try the navigation buttons below"
-            ),
-            "/vnc"
-        );
+    // @GET
+    // @Path("/test-error")
+    // public TemplateInstance testError() {
+    //     VNCTemplateData.ErrorInfo errorInfo = new VNCTemplateData.ErrorInfo(
+    //         "Test Error",
+    //         "This is a test error page to demonstrate the error template functionality.",
+    //         "TEST_ERROR",
+    //         List.of(
+    //             "This is just a test - no real error occurred",
+    //             "You can use this to verify error template styling",
+    //             "Try the navigation buttons below"
+    //         ),
+    //         "/vnc"
+    //     );
         
-        return vncError
-            .data("title", errorInfo.title)
-            .data("message", errorInfo.message)
-            .data("errorCode", errorInfo.errorCode)
-            .data("suggestions", errorInfo.suggestions)
-            .data("backUrl", errorInfo.backUrl)
-            .data("timestamp", errorInfo.timestamp);
-    }
+    //     return vncError
+    //         .data("title", errorInfo.title)
+    //         .data("message", errorInfo.message)
+    //         .data("errorCode", errorInfo.errorCode)
+    //         .data("suggestions", errorInfo.suggestions)
+    //         .data("backUrl", errorInfo.backUrl)
+    //         .data("timestamp", errorInfo.timestamp);
+    // }
     
     private List<VNCTemplateData.DemoUser> getDemoUsers() {
         return List.of(
