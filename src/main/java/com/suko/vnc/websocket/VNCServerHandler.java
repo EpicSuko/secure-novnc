@@ -230,18 +230,18 @@ public class VNCServerHandler {
     /**
      * Callback when server data is received
      */
-    private void onServerDataReceived(Buffer buffer) {
-        // This will be overridden by the protocol handler
-        log.debug("Server data received: {} bytes for session: {}", buffer.length(), sessionId);
-    }
+    // private void onServerDataReceived(Buffer buffer) {
+    //     // This will be overridden by the protocol handler
+    //     log.debug("Server data received: {} bytes for session: {}", buffer.length(), sessionId);
+    // }
     
     /**
      * Callback when server connection is closed
      */
-    private void onServerConnectionClosed() {
-        // This will be overridden by the connection manager
-        log.debug("Server connection closed for session: {}", sessionId);
-    }
+    // private void onServerConnectionClosed() {
+    //     // This will be overridden by the connection manager
+    //     log.debug("Server connection closed for session: {}", sessionId);
+    // }
     
     /**
      * Set the server data handler
