@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Wifi, WifiOff, Lock, Unlock } from "lucide-react"
+import { useState, useEffect } from "react"
 
 interface StatusBarProps {
   isConnected: boolean
@@ -16,6 +17,47 @@ interface StatusBarProps {
 }
 
 export function StatusBar({ isConnected, connectionStatus, serverInfo, encrypted, latency }: StatusBarProps) {
+  const [currentTime, setCurrentTime] = useState(new Date())
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null
+
+    const updateTime = () => {
+      setCurrentTime(new Date())
+    }
+
+    const startTimer = () => {
+      if (timer) clearInterval(timer)
+      timer = setInterval(updateTime, 60000) // Update every 60 seconds
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        updateTime() // Update immediately when becoming visible
+        startTimer()
+      } else {
+        if (timer) {
+          clearInterval(timer)
+          timer = null
+        }
+      }
+    }
+
+    // Initial update
+    updateTime()
+    
+    // Start timer
+    startTimer()
+
+    // Add visibility change listener
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      if (timer) clearInterval(timer)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
+
   return (
     <div className="flex items-center justify-between p-2 bg-muted/30 dark:bg-gray-800/30 border-t dark:border-gray-700 text-sm min-h-[40px]">
       <div className="flex items-center gap-4">
@@ -56,7 +98,7 @@ export function StatusBar({ isConnected, connectionStatus, serverInfo, encrypted
         {latency !== undefined && (
           <span className="text-muted-foreground dark:text-gray-400">Latency: {latency}ms</span>
         )}
-        <span className="text-muted-foreground dark:text-gray-400">{new Date().toLocaleTimeString()}</span>
+        <span className="text-muted-foreground dark:text-gray-400">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
       </div>
     </div>
   )
