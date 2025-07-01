@@ -11,7 +11,7 @@ export interface LatencyMeasurement {
  * Handles WebSocket-based latency measurement with integrated proxy-to-VNC latency fetching
  * Provides complete end-to-end latency measurements by combining:
  * - Browser-to-proxy latency (measured via WebSocket ping/pong)
- * - Proxy-to-VNC latency (fetched from performance API)
+ * - Proxy-to-VNC latency (fetched from performance API with 5-second caching)
  */
 class LatencyService {
   private ws: WebSocket | null = null
@@ -20,6 +20,11 @@ class LatencyService {
   private onLatencyUpdate: ((latency: LatencyMeasurement) => void) | null = null
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
+  
+  // Cache for proxy-to-VNC latency to reduce API calls
+  private cachedProxyLatency: number = 0
+  private cachedProxyLatencyTimestamp: number = 0
+  private readonly PROXY_LATENCY_CACHE_TTL = 5000 // 5 seconds cache TTL
 
   connect(sessionId: string, onUpdate: (latency: LatencyMeasurement) => void) {
     this.sessionId = sessionId
@@ -75,6 +80,35 @@ class LatencyService {
     }
   }
 
+  /**
+   * Get cached proxy-to-VNC latency or fetch from API if cache is stale
+   */
+  private async getProxyLatency(): Promise<number> {
+    const currentTime = Date.now()
+    
+    // Check if cache is still valid
+    if (currentTime - this.cachedProxyLatencyTimestamp < this.PROXY_LATENCY_CACHE_TTL) {
+      return this.cachedProxyLatency
+    }
+    
+    // Cache is stale, fetch new data
+    if (this.sessionId) {
+      try {
+        const connectionStats = await performanceService.getConnectionStats(this.sessionId)
+        if (connectionStats) {
+          this.cachedProxyLatency = connectionStats.proxyToVNCLatency
+          this.cachedProxyLatencyTimestamp = currentTime
+          return this.cachedProxyLatency
+        }
+      } catch (error) {
+        console.error('Failed to fetch proxy-to-VNC latency:', error)
+      }
+    }
+    
+    // Return cached value if fetch failed
+    return this.cachedProxyLatency
+  }
+
   private async calculateLatency(pongMessage: any) {
     const clientTimestamp = pongMessage.clientTimestamp
     const serverTimestamp = pongMessage.serverTimestamp
@@ -86,18 +120,8 @@ class LatencyService {
     // Calculate one-way latency (approximation)
     const browserToProxy = Math.round(roundTripTime / 2)
     
-    // Fetch proxy-to-VNC latency from the performance API
-    let proxyToVNC = 0
-    if (this.sessionId) {
-      try {
-        const connectionStats = await performanceService.getConnectionStats(this.sessionId)
-        if (connectionStats) {
-          proxyToVNC = connectionStats.proxyToVNCLatency
-        }
-      } catch (error) {
-        console.error('Failed to fetch proxy-to-VNC latency:', error)
-      }
-    }
+    // Get proxy-to-VNC latency (cached or fetched)
+    const proxyToVNC = await this.getProxyLatency()
     
     const totalEndToEnd = browserToProxy + proxyToVNC
     
@@ -165,6 +189,9 @@ class LatencyService {
     this.sessionId = null
     this.onLatencyUpdate = null
     this.reconnectAttempts = 0
+    
+    // Clear cache when disconnecting
+    this.clearProxyLatencyCache()
   }
 
   isConnected(): boolean {
@@ -180,10 +207,39 @@ class LatencyService {
     
     try {
       const connectionStats = await performanceService.getConnectionStats(this.sessionId)
-      return connectionStats?.proxyToVNCLatency || null
+      if (connectionStats) {
+        // Update cache with new value
+        this.cachedProxyLatency = connectionStats.proxyToVNCLatency
+        this.cachedProxyLatencyTimestamp = Date.now()
+        return connectionStats.proxyToVNCLatency
+      }
+      return null
     } catch (error) {
       console.error('Failed to refresh proxy-to-VNC latency:', error)
       return null
+    }
+  }
+
+  /**
+   * Clear the proxy-to-VNC latency cache
+   */
+  private clearProxyLatencyCache(): void {
+    this.cachedProxyLatency = 0
+    this.cachedProxyLatencyTimestamp = 0
+  }
+
+  /**
+   * Get cache statistics for debugging
+   */
+  getCacheStats(): { cachedValue: number; cacheAge: number; isStale: boolean } {
+    const currentTime = Date.now()
+    const cacheAge = currentTime - this.cachedProxyLatencyTimestamp
+    const isStale = cacheAge >= this.PROXY_LATENCY_CACHE_TTL
+    
+    return {
+      cachedValue: this.cachedProxyLatency,
+      cacheAge,
+      isStale
     }
   }
 }
