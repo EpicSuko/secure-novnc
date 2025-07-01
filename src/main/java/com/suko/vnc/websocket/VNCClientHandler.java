@@ -99,8 +99,8 @@ public class VNCClientHandler {
             // Update stats only when data is actually sent
             connection.updateStats(0, totalDataSize, latency);
             
-            // Update proxy-to-VNC latency (this measures the time to send data to VNC server)
-            connection.setProxyToVNCLatency(latency);
+            // Update proxy-to-client latency (this measures the time to send data to WebSocket client)
+            connection.setProxyToClientLatency(latency);
         }
         // Don't update stats here - only when data is actually sent
     }

@@ -28,6 +28,7 @@ public class VNCConnection {
     
     // Latency measurement fields
     public long browserToProxyLatency = 0;
+    public long proxyToClientLatency = 0;
     public long proxyToVNCLatency = 0;
     public long lastLatencyUpdate = 0;
     
@@ -133,10 +134,38 @@ public class VNCConnection {
     }
     
     /**
+     * Get browser-to-proxy latency
+     */
+    public long getBrowserToProxyLatency() {
+        return this.browserToProxyLatency;
+    }
+    
+    /**
+     * Set proxy-to-client latency
+     */
+    public void setProxyToClientLatency(long latency) {
+        this.proxyToClientLatency = latency;
+    }
+    
+    /**
+     * Get proxy-to-client latency
+     */
+    public long getProxyToClientLatency() {
+        return this.proxyToClientLatency;
+    }
+    
+    /**
      * Set proxy-to-VNC latency
      */
     public void setProxyToVNCLatency(long latency) {
         this.proxyToVNCLatency = latency;
+    }
+    
+    /**
+     * Get proxy-to-VNC latency
+     */
+    public long getProxyToVNCLatency() {
+        return this.proxyToVNCLatency;
     }
     
     /**
@@ -150,7 +179,7 @@ public class VNCConnection {
      * Get total end-to-end latency (browser to VNC server)
      */
     public long getTotalEndToEndLatency() {
-        return browserToProxyLatency + proxyToVNCLatency;
+        return browserToProxyLatency + proxyToClientLatency + proxyToVNCLatency;
     }
     
     /**

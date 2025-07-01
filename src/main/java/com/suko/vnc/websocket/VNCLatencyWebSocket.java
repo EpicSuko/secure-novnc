@@ -71,6 +71,18 @@ public class VNCLatencyWebSocket {
         long clientTimestamp = message.getJsonNumber("timestamp").longValue();
         long serverTimestamp = System.currentTimeMillis();
         
+        // Validate client timestamp
+        if (clientTimestamp <= 0 || clientTimestamp > serverTimestamp) {
+            log.warn("Invalid client timestamp {} for session: {}", clientTimestamp, sessionId);
+            return;
+        }
+        
+        // Check if timestamp is too old (more than 1 minute)
+        if (serverTimestamp - clientTimestamp > 60000) {
+            log.warn("Client timestamp too old for session: {}", sessionId);
+            return;
+        }
+        
         // Store the ping timestamp
         pingTimestamps.put(sessionId, clientTimestamp);
         
@@ -85,8 +97,7 @@ public class VNCLatencyWebSocket {
             success -> log.debug("Pong sent for session: {}", sessionId),
             failure -> log.error("Failed to send pong for session: {}", sessionId, failure)
         );
-    }
-    
+    }    
     private void handlePong(WebSocketConnection connection, String sessionId, JsonObject message) {
         // This is a response to our ping, calculate round-trip time
         long clientTimestamp = message.getJsonNumber("clientTimestamp").longValue();

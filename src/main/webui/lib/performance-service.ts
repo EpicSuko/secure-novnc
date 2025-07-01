@@ -37,7 +37,7 @@ class PerformanceService {
     this.baseUrl = '/api/vnc/performance'
   }
 
-  async getPerformanceStats(): Promise<VNCPerformanceStats> {
+  async getPerformanceStats(): Promise<VNCPerformanceStats | null> {
     try {
       const response = await fetch(this.baseUrl)
       if (!response.ok) {
@@ -46,14 +46,31 @@ class PerformanceService {
       return await response.json()
     } catch (error) {
       console.error('Failed to fetch performance stats:', error)
-      throw error
+      return null
     }
   }
+  // --- add these at the top of the class ---
+  private cachedStats: VNCPerformanceStats | null = null
+  private cacheTimestamp: number = 0
+  private readonly CACHE_TTL = 1000 // 1 second cache
 
+  private async getCachedPerformanceStats(): Promise<VNCPerformanceStats | null> {
+    const now = Date.now()
+    if (this.cachedStats && (now - this.cacheTimestamp) < this.CACHE_TTL) {
+      return this.cachedStats
+    }
+
+    this.cachedStats = await this.getPerformanceStats()
+    this.cacheTimestamp = now
+    return this.cachedStats
+  }
+
+  // --- existing methods, updated to use the cache ---
   async getConnectionLatency(sessionId?: string): Promise<number | null> {
     try {
-      const stats = await this.getPerformanceStats()
-      
+      const stats = await this.getCachedPerformanceStats()
+      if (!stats) return null
+
       // If sessionId is provided, try to get specific connection latency
       if (sessionId && stats.connections[sessionId]) {
         return stats.connections[sessionId].averageLatency
@@ -69,13 +86,13 @@ class PerformanceService {
 
   async getConnectionStats(sessionId: string): Promise<ConnectionStats | null> {
     try {
-      const stats = await this.getPerformanceStats()
+      const stats = await this.getCachedPerformanceStats()
+      if (!stats) return null
       return stats.connections[sessionId] || null
     } catch (error) {
       console.error('Failed to get connection stats:', error)
       return null
     }
-  }
-}
+  }}
 
 export const performanceService = new PerformanceService() 
