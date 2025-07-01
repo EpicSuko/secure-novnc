@@ -20,7 +20,7 @@ export function StatusBar({ isConnected, connectionStatus, serverInfo, encrypted
   const [currentTime, setCurrentTime] = useState(new Date())
 
   useEffect(() => {
-    let timer: NodeJS.Timeout | null = null
+    let timer: number | null = null
 
     const updateTime = () => {
       setCurrentTime(new Date())
@@ -28,7 +28,7 @@ export function StatusBar({ isConnected, connectionStatus, serverInfo, encrypted
 
     const startTimer = () => {
       if (timer) clearInterval(timer)
-      timer = setInterval(updateTime, 60000) // Update every 60 seconds
+      timer = window.setInterval(updateTime, 60000) // Update every 60 seconds
     }
 
     const handleVisibilityChange = () => {
