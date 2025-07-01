@@ -1,3 +1,5 @@
+import { performanceService } from './performance-service'
+
 export interface LatencyMeasurement {
   browserToProxy: number
   proxyToVNC: number
@@ -5,6 +7,12 @@ export interface LatencyMeasurement {
   timestamp: number
 }
 
+/**
+ * Handles WebSocket-based latency measurement with integrated proxy-to-VNC latency fetching
+ * Provides complete end-to-end latency measurements by combining:
+ * - Browser-to-proxy latency (measured via WebSocket ping/pong)
+ * - Proxy-to-VNC latency (fetched from performance API)
+ */
 class LatencyService {
   private ws: WebSocket | null = null
   private sessionId: string | null = null
@@ -36,8 +44,8 @@ class LatencyService {
         this.startPingInterval()
       }
       
-      this.ws.onmessage = (event) => {
-        this.handleMessage(event.data)
+      this.ws.onmessage = async (event) => {
+        await this.handleMessage(event.data)
       }
       
       this.ws.onclose = () => {
@@ -55,19 +63,19 @@ class LatencyService {
     }
   }
 
-  private handleMessage(data: string) {
+  private async handleMessage(data: string) {
     try {
       const message = JSON.parse(data)
       
       if (message.type === 'pong') {
-        this.calculateLatency(message)
+        await this.calculateLatency(message)
       }
     } catch (error) {
       console.error('Failed to parse latency message:', error)
     }
   }
 
-  private calculateLatency(pongMessage: any) {
+  private async calculateLatency(pongMessage: any) {
     const clientTimestamp = pongMessage.clientTimestamp
     const serverTimestamp = pongMessage.serverTimestamp
     const currentTime = Date.now()
@@ -78,9 +86,18 @@ class LatencyService {
     // Calculate one-way latency (approximation)
     const browserToProxy = Math.round(roundTripTime / 2)
     
-    // For now, we'll get proxy-to-VNC latency from the performance API
-    // In a real implementation, this would be measured separately
-    const proxyToVNC = 0 // Will be updated from performance API
+    // Fetch proxy-to-VNC latency from the performance API
+    let proxyToVNC = 0
+    if (this.sessionId) {
+      try {
+        const connectionStats = await performanceService.getConnectionStats(this.sessionId)
+        if (connectionStats) {
+          proxyToVNC = connectionStats.proxyToVNCLatency
+        }
+      } catch (error) {
+        console.error('Failed to fetch proxy-to-VNC latency:', error)
+      }
+    }
     
     const totalEndToEnd = browserToProxy + proxyToVNC
     
@@ -152,6 +169,22 @@ class LatencyService {
 
   isConnected(): boolean {
     return this.ws !== null && this.ws.readyState === WebSocket.OPEN
+  }
+
+  /**
+   * Manually refresh proxy-to-VNC latency from performance API
+   * This can be called periodically to get updated latency data
+   */
+  async refreshProxyLatency(): Promise<number | null> {
+    if (!this.sessionId) return null
+    
+    try {
+      const connectionStats = await performanceService.getConnectionStats(this.sessionId)
+      return connectionStats?.proxyToVNCLatency || null
+    } catch (error) {
+      console.error('Failed to refresh proxy-to-VNC latency:', error)
+      return null
+    }
   }
 }
 

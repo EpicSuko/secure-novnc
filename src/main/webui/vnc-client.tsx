@@ -8,7 +8,7 @@ import { StatusBar } from "./components/status-bar"
 import { Monitor } from "lucide-react"
 import { UserMenu } from "./components/user-menu"
 import { ThemeToggle } from "./components/theme-toggle"
-import { performanceService } from "./lib/performance-service"
+
 import { latencyService, type LatencyMeasurement } from "./lib/latency-service"
 
 interface VNCClientProps {
@@ -125,37 +125,37 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
       return
     }
 
-    // Start WebSocket-based latency measurement
+    // Start WebSocket-based latency measurement (now includes proxy-to-VNC latency)
     latencyService.connect(sessionId, (measurement) => {
       setLatencyDetails(measurement)
       // Use total end-to-end latency as the primary latency value
       setLatency(measurement.totalEndToEnd)
     })
 
-    // Fetch proxy-to-VNC latency from performance API
-    const fetchProxyLatency = async () => {
+    // Periodically refresh proxy-to-VNC latency for more frequent updates
+    const refreshProxyLatency = async () => {
       try {
         setIsLatencyLoading(true)
-        const connectionStats = await performanceService.getConnectionStats(sessionId)
-        if (connectionStats && latencyDetails) {
+        const proxyLatency = await latencyService.refreshProxyLatency()
+        if (proxyLatency !== null && latencyDetails) {
           // Update the proxy-to-VNC latency
           const updatedMeasurement: LatencyMeasurement = {
             ...latencyDetails,
-            proxyToVNC: connectionStats.proxyToVNCLatency,
-            totalEndToEnd: latencyDetails.browserToProxy + connectionStats.proxyToVNCLatency
+            proxyToVNC: proxyLatency,
+            totalEndToEnd: latencyDetails.browserToProxy + proxyLatency
           }
           setLatencyDetails(updatedMeasurement)
           setLatency(updatedMeasurement.totalEndToEnd)
         }
       } catch (error) {
-        console.error('Failed to fetch proxy latency:', error)
+        console.error('Failed to refresh proxy latency:', error)
       } finally {
         setIsLatencyLoading(false)
       }
     }
 
-    // Fetch proxy latency every 10 seconds
-    const interval = setInterval(fetchProxyLatency, 10000)
+    // Refresh proxy latency every 10 seconds for more frequent updates
+    const interval = setInterval(refreshProxyLatency, 10000)
 
     return () => {
       clearInterval(interval)

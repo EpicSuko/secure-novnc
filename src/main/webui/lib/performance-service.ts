@@ -93,6 +93,7 @@ class PerformanceService {
       console.error('Failed to get connection stats:', error)
       return null
     }
-  }}
+  }
+}
 
 export const performanceService = new PerformanceService() 
