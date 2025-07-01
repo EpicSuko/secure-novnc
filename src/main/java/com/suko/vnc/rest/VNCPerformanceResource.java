@@ -53,8 +53,12 @@ public class VNCPerformanceResource {
                         connStats.put("bytesSent", conn.bytesSent);
                         connStats.put("messageCount", conn.messageCount);
                         connStats.put("averageLatency", conn.getAverageLatency());
+                        connStats.put("browserToProxyLatency", conn.browserToProxyLatency);
+                        connStats.put("proxyToVNCLatency", conn.proxyToVNCLatency);
+                        connStats.put("totalEndToEndLatency", conn.getTotalEndToEndLatency());
                         connStats.put("throughput", conn.getThroughput());
                         connStats.put("lastActivity", conn.lastActivityTime);
+                        connStats.put("lastLatencyUpdate", conn.lastLatencyUpdate);
                         connStats.put("clientBufferSize", conn.clientHandler != null ? conn.clientHandler.getBufferSize() : 0);
                         connStats.put("serverBufferSize", conn.serverHandler != null ? conn.serverHandler.getBufferSize() : 0);
                         return connStats;

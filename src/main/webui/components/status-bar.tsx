@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Wifi, WifiOff, Lock, Unlock } from "lucide-react"
+import { Wifi, WifiOff, Lock, Unlock, Loader2 } from "lucide-react"
 import { useState, useEffect } from "react"
 
 interface StatusBarProps {
@@ -14,9 +14,16 @@ interface StatusBarProps {
   }
   encrypted: boolean
   latency?: number
+  isLatencyLoading?: boolean
+  latencyDetails?: {
+    browserToProxy: number
+    proxyToVNC: number
+    totalEndToEnd: number
+    timestamp: number
+  }
 }
 
-export function StatusBar({ isConnected, connectionStatus, serverInfo, encrypted, latency }: StatusBarProps) {
+export function StatusBar({ isConnected, connectionStatus, serverInfo, encrypted, latency, isLatencyLoading, latencyDetails }: StatusBarProps) {
   const [currentTime, setCurrentTime] = useState(new Date())
 
   useEffect(() => {
@@ -96,7 +103,31 @@ export function StatusBar({ isConnected, connectionStatus, serverInfo, encrypted
 
       <div className="flex items-center gap-4">
         {latency !== undefined && (
-          <span className="text-muted-foreground dark:text-gray-400">Latency: {latency}ms</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-x-3">
+              <span className="text-muted-foreground dark:text-gray-400 text-xs">
+                {`Total: ${latency}ms`}
+              </span>
+              {latencyDetails && (
+                <span className="text-xs text-muted-foreground/70 dark:text-gray-500 flex items-center gap-x-1">
+                  <span title="Browser to Proxy">B→P: {latencyDetails.browserToProxy}ms</span>
+                  <span>|</span>
+                  <span title="Proxy to VNC">P→V: {latencyDetails.proxyToVNC}ms</span>
+                </span>
+              )}
+            </div>
+            {isLatencyLoading ? (
+              <span title="Measuring latency...">
+                <Loader2 className="w-3 h-3 animate-spin" />
+              </span>
+            ) : (
+              <div className={`w-2 h-2 rounded-full ${
+                latency < 20 ? 'bg-green-500' : 
+                latency < 50 ? 'bg-yellow-500' : 
+                'bg-red-500'
+              }`} title={`${latency < 20 ? 'Excellent' : latency < 50 ? 'Good' : 'Poor'} latency`} />
+            )}
+          </div>
         )}
         <span className="text-muted-foreground dark:text-gray-400">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
       </div>

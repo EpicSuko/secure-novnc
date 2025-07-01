@@ -98,6 +98,9 @@ public class VNCClientHandler {
             long latency = (endTime - startTime) / 1_000_000; // Convert to milliseconds
             // Update stats only when data is actually sent
             connection.updateStats(0, totalDataSize, latency);
+            
+            // Update proxy-to-VNC latency (this measures the time to send data to VNC server)
+            connection.setProxyToVNCLatency(latency);
         }
         // Don't update stats here - only when data is actually sent
     }

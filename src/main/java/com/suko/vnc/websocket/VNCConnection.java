@@ -26,6 +26,11 @@ public class VNCConnection {
     public Buffer serverBuffer = Buffer.buffer();
     public static final int BUFFER_THRESHOLD = 1024; // 1KB threshold for buffering
     
+    // Latency measurement fields
+    public long browserToProxyLatency = 0;
+    public long proxyToVNCLatency = 0;
+    public long lastLatencyUpdate = 0;
+    
     // Handshake related fields
     public String serverRfbVersion;
     public String clientRfbVersion;
@@ -118,6 +123,34 @@ public class VNCConnection {
      */
     public double getAverageLatency() {
         return messageCount > 0 ? (double) totalLatency / messageCount : 0.0;
+    }
+    
+    /**
+     * Set browser-to-proxy latency
+     */
+    public void setBrowserToProxyLatency(long latency) {
+        this.browserToProxyLatency = latency;
+    }
+    
+    /**
+     * Set proxy-to-VNC latency
+     */
+    public void setProxyToVNCLatency(long latency) {
+        this.proxyToVNCLatency = latency;
+    }
+    
+    /**
+     * Set last latency update timestamp
+     */
+    public void setLastLatencyUpdate(long timestamp) {
+        this.lastLatencyUpdate = timestamp;
+    }
+    
+    /**
+     * Get total end-to-end latency (browser to VNC server)
+     */
+    public long getTotalEndToEndLatency() {
+        return browserToProxyLatency + proxyToVNCLatency;
     }
     
     /**
