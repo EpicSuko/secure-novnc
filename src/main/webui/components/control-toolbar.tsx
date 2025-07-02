@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
   Power,
-  RotateCcw,
   Maximize2,
   Minimize2,
   Keyboard,
@@ -16,7 +15,6 @@ interface ControlToolbarProps {
   isConnected: boolean
   isFullscreen: boolean
   onDisconnect: () => void
-  onRestart: () => void
   onToggleFullscreen: () => void
   onSendCtrlAltDel: () => void
   onCopy: () => void
@@ -27,7 +25,6 @@ export function ControlToolbar({
   isConnected,
   isFullscreen,
   onDisconnect,
-  onRestart,
   onToggleFullscreen,
   onSendCtrlAltDel,
   onCopy,
@@ -47,17 +44,6 @@ export function ControlToolbar({
       </Button>
 
       <Separator orientation="vertical" className="h-6 dark:bg-gray-600" />
-
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onRestart}
-        disabled={!isConnected}
-        className="dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 bg-transparent"
-      >
-        <RotateCcw className="w-4 h-4 mr-2" />
-        Restart
-      </Button>
 
       <Button
         variant="outline"

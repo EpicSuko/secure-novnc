@@ -40,14 +40,6 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
     setLatency(undefined)
   }, [])
 
-  const handleRestart = useCallback(() => {
-    if (!isConnected) return
-    setConnectionStatus("Restarting...")
-    setTimeout(() => {
-      setConnectionStatus("Connected")
-    }, 3000)
-  }, [isConnected])
-
   const handleToggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen()
@@ -190,7 +182,6 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
           isConnected={isConnected}
           isFullscreen={isFullscreen}
           onDisconnect={handleDisconnect}
-          onRestart={handleRestart}
           onToggleFullscreen={handleToggleFullscreen}
           onSendCtrlAltDel={handleSendCtrlAltDel}
           onCopy={handleCopy}
