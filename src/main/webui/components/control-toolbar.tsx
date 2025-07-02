@@ -8,8 +8,6 @@ import {
   Maximize2,
   Minimize2,
   Keyboard,
-  Volume2,
-  VolumeX,
   Copy,
   ClipboardPasteIcon as Paste,
 } from "lucide-react"
@@ -17,11 +15,9 @@ import {
 interface ControlToolbarProps {
   isConnected: boolean
   isFullscreen: boolean
-  isMuted: boolean
   onDisconnect: () => void
   onRestart: () => void
   onToggleFullscreen: () => void
-  onToggleMute: () => void
   onSendCtrlAltDel: () => void
   onCopy: () => void
   onPaste: () => void
@@ -30,11 +26,9 @@ interface ControlToolbarProps {
 export function ControlToolbar({
   isConnected,
   isFullscreen,
-  isMuted,
   onDisconnect,
   onRestart,
   onToggleFullscreen,
-  onToggleMute,
   onSendCtrlAltDel,
   onCopy,
   onPaste,
@@ -110,17 +104,6 @@ export function ControlToolbar({
       >
         {isFullscreen ? <Minimize2 className="w-4 h-4 mr-2" /> : <Maximize2 className="w-4 h-4 mr-2" />}
         {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-      </Button>
-
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onToggleMute}
-        disabled={!isConnected}
-        className="dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 bg-transparent"
-      >
-        {isMuted ? <VolumeX className="w-4 h-4 mr-2" /> : <Volume2 className="w-4 h-4 mr-2" />}
-        {isMuted ? "Unmute" : "Mute"}
       </Button>
     </div>
   )

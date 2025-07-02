@@ -21,7 +21,6 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
   const [isConnected, setIsConnected] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState("Disconnected")
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [isMuted, setIsMuted] = useState(false)
   const [config, setConfig] = useState<ConnectionConfig | null>(null)
   const [latency, setLatency] = useState<number>()
   const [isLatencyLoading, setIsLatencyLoading] = useState(false)
@@ -58,10 +57,6 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
       setIsFullscreen(false)
     }
   }, [])
-
-  const handleToggleMute = useCallback(() => {
-    setIsMuted(!isMuted)
-  }, [isMuted])
 
   const handleSendCtrlAltDel = useCallback(() => {
     if (!isConnected) return
@@ -194,11 +189,9 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
         <ControlToolbar
           isConnected={isConnected}
           isFullscreen={isFullscreen}
-          isMuted={isMuted}
           onDisconnect={handleDisconnect}
           onRestart={handleRestart}
           onToggleFullscreen={handleToggleFullscreen}
-          onToggleMute={handleToggleMute}
           onSendCtrlAltDel={handleSendCtrlAltDel}
           onCopy={handleCopy}
           onPaste={handlePaste}
