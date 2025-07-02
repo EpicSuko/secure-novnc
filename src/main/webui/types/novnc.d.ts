@@ -18,5 +18,6 @@ declare module '@novnc/novnc/lib/rfb' {
     disconnect(): void;
     sendCtrlAltDel(): void;
     clipboardPasteFrom(text: string): void;
+    _handleResize(): void;
   }
 } 

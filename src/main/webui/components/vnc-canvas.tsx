@@ -75,6 +75,9 @@ export function VNCCanvas({
         // Set view-only mode
         rfb.viewOnly = viewOnly
 
+        rfb.scaleViewport = true
+        rfb.resizeSession = true
+
         // Event handlers
         rfb.addEventListener("connect", () => {
           setConnectionStatus("Connected")
@@ -97,11 +100,6 @@ export function VNCCanvas({
           setConnectionStatus("Security Failure")
           onConnectionChange?.(false)
           console.error("Security failure:", e.detail)
-        })
-
-        rfb.addEventListener("desktopname", (e: any) => {
-          rfb.scaleViewport = true
-          rfb.resizeSession = true
         })
 
         rfbRef.current = rfb
