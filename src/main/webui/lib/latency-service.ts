@@ -24,7 +24,11 @@ class LatencyService {
   // Cache for proxy-to-VNC latency to reduce API calls
   private cachedProxyLatency: number = 0
   private cachedProxyLatencyTimestamp: number = 0
+  private cacheInitialized: boolean = false
   private readonly PROXY_LATENCY_CACHE_TTL = 5000 // 5 seconds cache TTL
+  private readonly MAX_STALENESS_THRESHOLD = 30000 // 30 seconds maximum staleness
+  private fetchingProxyLatency: boolean = false
+  private currentFetchPromise: Promise<number> | null = null
 
   connect(sessionId: string, onUpdate: (latency: LatencyMeasurement) => void) {
     this.sessionId = sessionId
@@ -82,6 +86,8 @@ class LatencyService {
 
   /**
    * Get cached proxy-to-VNC latency or fetch from API if cache is stale
+   * Handles concurrent requests by reusing ongoing fetch promises
+   * Prevents use of excessively stale data when fetch fails
    */
   private async getProxyLatency(): Promise<number> {
     const currentTime = Date.now()
@@ -91,22 +97,60 @@ class LatencyService {
       return this.cachedProxyLatency
     }
     
-    // Cache is stale, fetch new data
-    if (this.sessionId) {
-      try {
-        const connectionStats = await performanceService.getConnectionStats(this.sessionId)
-        if (connectionStats) {
-          this.cachedProxyLatency = connectionStats.proxyToVNCLatency
-          this.cachedProxyLatencyTimestamp = currentTime
-          return this.cachedProxyLatency
-        }
-      } catch (error) {
-        console.error('Failed to fetch proxy-to-VNC latency:', error)
-      }
+    // Check if a fetch is already in progress
+    if (this.fetchingProxyLatency && this.currentFetchPromise) {
+      return await this.currentFetchPromise
     }
     
-    // Return cached value if fetch failed
-    return this.cachedProxyLatency
+    // Check if cached data is too stale to use as fallback
+    const cacheAge = currentTime - this.cachedProxyLatencyTimestamp
+    if (cacheAge > this.MAX_STALENESS_THRESHOLD) {
+      console.warn('Proxy latency cache is too stale, forcing fresh fetch')
+    }
+    
+    // Start new fetch
+    this.fetchingProxyLatency = true
+    this.currentFetchPromise = this.performProxyLatencyFetch(currentTime)
+    
+    try {
+      const result = await this.currentFetchPromise
+      return result
+    } finally {
+      this.fetchingProxyLatency = false
+      this.currentFetchPromise = null
+    }
+  }
+
+  /**
+   * Perform the actual proxy latency fetch operation
+   */
+  private async performProxyLatencyFetch(currentTime: number): Promise<number> {
+    if (!this.sessionId) {
+      throw new Error('No session ID available for proxy latency fetch')
+    }
+    
+    try {
+      const connectionStats = await performanceService.getConnectionStats(this.sessionId)
+      if (connectionStats) {
+        this.cachedProxyLatency = connectionStats.proxyToVNCLatency
+        this.cachedProxyLatencyTimestamp = currentTime
+        this.cacheInitialized = true
+        return this.cachedProxyLatency
+      } else {
+        throw new Error('No connection stats returned from performance service')
+      }
+    } catch (error) {
+      console.error('Failed to fetch proxy-to-VNC latency:', error)
+      
+      // Check if we can use cached data as fallback
+      const cacheAge = currentTime - this.cachedProxyLatencyTimestamp
+      if (cacheAge <= this.MAX_STALENESS_THRESHOLD) {
+        console.warn('Using cached proxy latency as fallback due to fetch failure')
+        return this.cachedProxyLatency
+      } else {
+        throw new Error(`Proxy latency fetch failed and cache is too stale (${cacheAge}ms old)`)
+      }
+    }
   }
 
   private async calculateLatency(pongMessage: any) {
@@ -121,7 +165,14 @@ class LatencyService {
     const browserToProxy = Math.round(roundTripTime / 2)
     
     // Get proxy-to-VNC latency (cached or fetched)
-    const proxyToVNC = await this.getProxyLatency()
+    let proxyToVNC = 0
+    try {
+      proxyToVNC = await this.getProxyLatency()
+    } catch (error) {
+      console.error('Failed to get proxy-to-VNC latency:', error)
+      // Use 0 as fallback when we can't get proxy latency
+      proxyToVNC = 0
+    }
     
     const totalEndToEnd = browserToProxy + proxyToVNC
     
@@ -211,6 +262,7 @@ class LatencyService {
         // Update cache with new value
         this.cachedProxyLatency = connectionStats.proxyToVNCLatency
         this.cachedProxyLatencyTimestamp = Date.now()
+        this.cacheInitialized = true
         return connectionStats.proxyToVNCLatency
       }
       return null
@@ -226,20 +278,40 @@ class LatencyService {
   private clearProxyLatencyCache(): void {
     this.cachedProxyLatency = 0
     this.cachedProxyLatencyTimestamp = 0
+    this.cacheInitialized = false
+    this.fetchingProxyLatency = false
+    this.currentFetchPromise = null
   }
 
   /**
    * Get cache statistics for debugging
    */
-  getCacheStats(): { cachedValue: number; cacheAge: number; isStale: boolean } {
+  getCacheStats(): { cachedValue: number; cacheAge: number; isStale: boolean; isFetching: boolean; isTooStale: boolean; cacheInitialized: boolean } {
     const currentTime = Date.now()
+    
+    // If cache is not initialized, return meaningful default values
+    if (!this.cacheInitialized) {
+      return {
+        cachedValue: 0,
+        cacheAge: 0,
+        isStale: false,
+        isFetching: this.fetchingProxyLatency,
+        isTooStale: false,
+        cacheInitialized: false
+      }
+    }
+    
     const cacheAge = currentTime - this.cachedProxyLatencyTimestamp
     const isStale = cacheAge >= this.PROXY_LATENCY_CACHE_TTL
+    const isTooStale = cacheAge > this.MAX_STALENESS_THRESHOLD
     
     return {
       cachedValue: this.cachedProxyLatency,
       cacheAge,
-      isStale
+      isStale,
+      isFetching: this.fetchingProxyLatency,
+      isTooStale,
+      cacheInitialized: true
     }
   }
 }
