@@ -137,7 +137,7 @@ class LatencyService {
         this.cacheInitialized = true
         return this.cachedProxyLatency
       } else {
-        throw new Error('No connection stats returned from performance service')
+        throw new Error('Performance service returned null or undefined connection stats')
       }
     } catch (error) {
       console.error('Failed to fetch proxy-to-VNC latency:', error)
