@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react"
 import { ConnectionDialog, type ConnectionConfig } from "./components/connection-dialog"
 import { ControlToolbar } from "./components/control-toolbar"
-import { VNCCanvas } from "./components/vnc-canvas"
+import { VNCCanvas, type VNCCanvasRef } from "./components/vnc-canvas"
 import { StatusBar } from "./components/status-bar"
 import { Monitor } from "lucide-react"
 import { UserMenu } from "./components/user-menu"
@@ -26,7 +26,7 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
   const [isLatencyLoading, setIsLatencyLoading] = useState(false)
   const [latencyDetails, setLatencyDetails] = useState<LatencyMeasurement | null>(null)
 
-  const canvasRef = useRef<HTMLDivElement>(null)
+  const vncRef = useRef<VNCCanvasRef>(null)
 
   const handleConnect = useCallback((newConfig: ConnectionConfig) => {
     setConfig(newConfig)
@@ -52,10 +52,7 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
 
   const handleSendCtrlAltDel = useCallback(() => {
     if (!isConnected) return
-    const canvas = document.querySelector("[data-novnc-canvas]") as any
-    if (canvas && canvas.sendCtrlAltDel) {
-      canvas.sendCtrlAltDel()
-    }
+    vncRef.current?.sendCtrlAltDel()
   }, [isConnected])
 
   const handleCopy = useCallback(async () => {
@@ -70,10 +67,7 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
   const handlePaste = useCallback(async () => {
     try {
       const text = await navigator.clipboard.readText()
-      const canvas = document.querySelector("[data-novnc-canvas]") as any
-      if (canvas && canvas.sendClipboard) {
-        canvas.sendClipboard(text)
-      }
+      vncRef.current?.sendClipboard(text)
     } catch (err) {
       console.error("Failed to paste to clipboard:", err)
     }
@@ -192,6 +186,7 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
       {/* Main Canvas Area */}
       <div className="flex-1 min-h-0 p-2">
         <VNCCanvas
+          ref={vncRef}
           isConnected={isConnected}
           viewOnly={config?.viewOnly || false}
           host={config?.host}

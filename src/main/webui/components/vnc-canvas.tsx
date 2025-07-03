@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from "react"
 import { Card } from "@/components/ui/card"
 import NoVncClient from "@novnc/novnc/lib/rfb"
 
@@ -17,7 +17,14 @@ interface VNCCanvasProps {
   onKeyPress?: (key: string, keyCode: number) => void
 }
 
-export function VNCCanvas({
+export interface VNCCanvasRef {
+  rfb: NoVncClient | null
+  sendCtrlAltDel: () => void
+  sendClipboard: (text: string) => void
+  disconnect: () => void
+}
+
+export const VNCCanvas = forwardRef<VNCCanvasRef, VNCCanvasProps>(({
   isConnected,
   viewOnly,
   host,
@@ -28,11 +35,34 @@ export function VNCCanvas({
   onMouseMove,
   onMouseClick,
   onKeyPress,
-}: VNCCanvasProps) {
+}, ref) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const rfbRef = useRef<NoVncClient | null>(null)
   const [connectionStatus, setConnectionStatus] = useState("Disconnected")
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
+
+  // Expose methods and RFB instance to parent components
+  useImperativeHandle(ref, () => ({
+    get rfb() {
+      return rfbRef.current
+    },
+    sendCtrlAltDel: () => {
+      if (rfbRef.current) {
+        rfbRef.current.sendCtrlAltDel()
+      }
+    },
+    sendClipboard: (text: string) => {
+      if (rfbRef.current) {
+        rfbRef.current.clipboardPasteFrom(text)
+      }
+    },
+    disconnect: () => {
+      if (rfbRef.current) {
+        rfbRef.current.disconnect()
+        rfbRef.current = null
+      }
+    }
+  }), [])
 
   // Initialize noVNC when component mounts and connection is requested
   useEffect(() => {
@@ -108,12 +138,6 @@ export function VNCCanvas({
         })
 
         rfbRef.current = rfb
-
-        // Store methods for external access
-        if (containerRef.current) {
-          ;(containerRef.current as any).sendCtrlAltDel = () => rfb.sendCtrlAltDel()
-          ;(containerRef.current as any).sendClipboard = (text: string) => rfb.clipboardPasteFrom(text)
-        }
       } catch (error) {
         console.error("Failed to initialize noVNC:", error)
         setConnectionStatus("Failed to load noVNC")
@@ -138,27 +162,6 @@ export function VNCCanvas({
       rfbRef.current.viewOnly = viewOnly
     }
   }, [viewOnly])
-
-  // Expose methods for parent component
-  const sendCtrlAltDel = useCallback(() => {
-    if (rfbRef.current) {
-      rfbRef.current.sendCtrlAltDel()
-    }
-  }, [])
-
-  const sendClipboard = useCallback((text: string) => {
-    if (rfbRef.current) {
-      rfbRef.current.clipboardPasteFrom(text)
-    }
-  }, [])
-
-  // Store methods on container for external access
-  useEffect(() => {
-    if (containerRef.current) {
-      ;(containerRef.current as any).sendCtrlAltDel = sendCtrlAltDel
-      ;(containerRef.current as any).sendClipboard = sendClipboard
-    }
-  }, [sendCtrlAltDel, sendClipboard])
 
   return (
     <Card className="h-full w-full p-4 dark:bg-gray-900/50 dark:border-gray-700 overflow-hidden">
@@ -194,4 +197,6 @@ export function VNCCanvas({
       </div>
     </Card>
   )
-}
+})
+
+VNCCanvas.displayName = "VNCCanvas"
