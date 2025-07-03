@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { Card } from "@/components/ui/card"
+import NoVncClient from "@novnc/novnc/lib/rfb"
 
 interface VNCCanvasProps {
   isConnected: boolean
@@ -29,7 +30,7 @@ export function VNCCanvas({
   onKeyPress,
 }: VNCCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const rfbRef = useRef<any>(null)
+  const rfbRef = useRef<NoVncClient | null>(null)
   const [connectionStatus, setConnectionStatus] = useState("Disconnected")
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
 
@@ -67,7 +68,11 @@ export function VNCCanvas({
 
         // Create new RFB connection
         const rfb = new RFB(containerRef.current, url, {
-          credentials: { password: password || "" },
+          credentials: { 
+            username: "",
+            password: password || "",
+            target: ""
+          },
           repeaterID: "",
           shared: true,
         })
