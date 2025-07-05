@@ -1,15 +1,18 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect } from "react"
-import { ConnectionDialog, type ConnectionConfig } from "./components/connection-dialog"
+import { ConnectButton, type ConnectionConfig } from "./components/connect-button"
 import { ControlToolbar } from "./components/control-toolbar"
 import { VNCCanvas, type VNCCanvasRef } from "./components/vnc-canvas"
 import { StatusBar } from "./components/status-bar"
 import { Monitor } from "lucide-react"
 import { UserMenu } from "./components/user-menu"
 import { ThemeToggle } from "./components/theme-toggle"
+import { Alert, AlertDescription } from "./components/ui/alert"
+import { AlertCircle } from "lucide-react"
 
 import { latencyService, type LatencyMeasurement } from "./lib/latency-service"
+import { configService, type ConfigResponse } from "./lib/config-service"
 
 interface VNCClientProps {
   username: string
@@ -22,17 +25,46 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
   const [connectionStatus, setConnectionStatus] = useState("Disconnected")
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [config, setConfig] = useState<ConnectionConfig | null>(null)
+  const [wsConfig, setWsConfig] = useState<ConfigResponse | null>(null)
   const [latency, setLatency] = useState<number>()
   const [isLatencyLoading, setIsLatencyLoading] = useState(false)
   const [latencyDetails, setLatencyDetails] = useState<LatencyMeasurement | null>(null)
+  const [connectionError, setConnectionError] = useState<string | null>(null)
 
   const vncRef = useRef<VNCCanvasRef>(null)
+  const isMountedRef = useRef(true)
 
   const handleConnect = useCallback((newConfig: ConnectionConfig) => {
     setConfig(newConfig)
     setConnectionStatus("Connecting...")
-    setIsConnected(true) // This will trigger noVNC connection
-  }, [])
+    setConnectionError(null)
+    
+    // If we have a sessionId, try to get the WebSocket config for auto-connect
+    if (sessionId) {
+      configService.getConfig(sessionId)
+        .then(config => {
+          // Check if component is still mounted before updating state
+          if (isMountedRef.current) {
+            setWsConfig(config)
+            // Set isConnected to true to trigger VNCCanvas connection
+            // The actual connection state will be managed by VNCCanvas through onConnectionChange
+            setIsConnected(true)
+          }
+        })
+        .catch(error => {
+          // Check if component is still mounted before updating state
+          if (isMountedRef.current) {
+            console.error('Failed to get WebSocket config:', error)
+            setConnectionError('Failed to establish connection. Please try again.')
+            setConnectionStatus("Connection Failed")
+          }
+        })
+    } else {
+      // No sessionId, use manual connection
+      // Set isConnected to true to trigger VNCCanvas connection with manual config
+      setIsConnected(true)
+    }
+  }, [sessionId])
 
   const handleDisconnect = useCallback(() => {
     setIsConnected(false)
@@ -97,6 +129,29 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
       }
     : undefined
 
+  // Cleanup effect to track component mount state
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  // Auto-connect when sessionId is available
+  useEffect(() => {
+    if (sessionId && !isConnected && !config) {
+      // Auto-connect using the session
+      handleConnect({
+        host: 'localhost', // This will be overridden by wsConfig
+        port: '8080',      // This will be overridden by wsConfig
+        password: '',      // No password needed for WebSocket proxy
+        viewOnly: false,
+        shared: true,
+        quality: 6
+      })
+    }
+  }, [sessionId, isConnected, config, handleConnect])
+
   // Start latency measurement when connected
   useEffect(() => {
     if (!isConnected || !sessionId) {
@@ -147,6 +202,7 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
   const handleConnectionChange = useCallback((connected: boolean) => {
     if (connected) {
       setConnectionStatus("Connected")
+      setConnectionError(null)
       // Latency will be fetched by the useEffect above
     } else {
       setIsConnected(false)
@@ -165,7 +221,7 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
         </div>
         <div className="flex items-center gap-3">
           <ThemeToggle />
-          <ConnectionDialog onConnect={handleConnect} isConnected={isConnected} />
+          <ConnectButton onConnect={handleConnect} isConnected={isConnected} />
           <UserMenu username={username} onLogout={onLogout} />
         </div>
       </div>
@@ -183,6 +239,16 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
         />
       </div>
 
+      {/* Connection Error Alert */}
+      {connectionError && (
+        <div className="flex-shrink-0 p-2">
+          <Alert variant="destructive" className="dark:border-red-800 dark:bg-red-900/20">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="dark:text-red-300">{connectionError}</AlertDescription>
+          </Alert>
+        </div>
+      )}
+
       {/* Main Canvas Area */}
       <div className="flex-1 min-h-0 p-2">
         <VNCCanvas
@@ -193,6 +259,7 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
           port={config?.port}
           password={config?.password}
           sessionId={sessionId}
+          wsConfig={wsConfig}
           onConnectionChange={handleConnectionChange}
           onMouseMove={handleMouseMove}
           onMouseClick={handleMouseClick}

@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from "react"
 import { Card } from "@/components/ui/card"
 import NoVncClient from "@novnc/novnc/lib/rfb"
+import { ConfigResponse } from "@/lib/config-service"
+import { ConnectionConfig } from "./connect-button"
 
 interface VNCCanvasProps {
   isConnected: boolean
@@ -11,6 +13,7 @@ interface VNCCanvasProps {
   port?: string
   password?: string
   sessionId?: string
+  wsConfig?: ConfigResponse | null
   onConnectionChange?: (connected: boolean) => void
   onMouseMove?: (x: number, y: number) => void
   onMouseClick?: (x: number, y: number, button: number) => void
@@ -31,6 +34,7 @@ export const VNCCanvas = forwardRef<VNCCanvasRef, VNCCanvasProps>(({
   port,
   password,
   sessionId,
+  wsConfig,
   onConnectionChange,
   onMouseMove,
   onMouseClick,
@@ -71,12 +75,18 @@ export const VNCCanvas = forwardRef<VNCCanvasRef, VNCCanvasProps>(({
 
       try {
         // Only connect if we have connection details and should be connected
-        if (!isConnected || !host || !port) {
+        if (!isConnected) {
           // Clean up existing connection if disconnecting
           if (rfbRef.current) {
             rfbRef.current.disconnect()
             rfbRef.current = null
           }
+          return
+        }
+
+        // Check if we have WebSocket config for auto-connect
+        if (!wsConfig && (!host || !port)) {
+          console.log("No connection details available")
           return
         }
 
@@ -94,7 +104,21 @@ export const VNCCanvas = forwardRef<VNCCanvasRef, VNCCanvasProps>(({
         // Clear container
         containerRef.current.innerHTML = ""
 
-        const url = `ws://${host}:${port}/websockify/${sessionId}`
+        // Use WebSocket config for auto-connect if available, otherwise use manual config
+        let url: string
+        if (wsConfig && sessionId) {
+          const protocol = wsConfig.protocol || 'ws'
+          url = `${protocol}://${wsConfig.wsHost}:${wsConfig.wsPort}${wsConfig.wsUrl}`
+          console.log("Using auto-connect WebSocket URL:", url)
+        } else if (host && port && sessionId) {
+          url = `ws://${host}:${port}/websockify/${sessionId}`
+          console.log("Using manual WebSocket URL:", url)
+        } else {
+          console.error("No valid connection configuration available")
+          setConnectionStatus("Configuration Error")
+          onConnectionChange?.(false)
+          return
+        }
 
         // Create new RFB connection
         const rfb = new RFB(containerRef.current, url, {
@@ -154,7 +178,7 @@ export const VNCCanvas = forwardRef<VNCCanvasRef, VNCCanvasProps>(({
         rfbRef.current = null
       }
     }
-  }, [isConnected, host, port, password, viewOnly, onConnectionChange])
+  }, [isConnected, host, port, password, viewOnly, wsConfig, sessionId, onConnectionChange])
 
   // Handle view-only mode changes
   useEffect(() => {
