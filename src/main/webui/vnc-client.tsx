@@ -67,7 +67,7 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
   const handlePaste = useCallback(async () => {
     try {
       const text = await navigator.clipboard.readText()
-      vncRef.current?.sendClipboard(text)
+      vncRef.current?.rfb?.clipboardPasteFrom(text)
     } catch (err) {
       console.error("Failed to paste to clipboard:", err)
     }
