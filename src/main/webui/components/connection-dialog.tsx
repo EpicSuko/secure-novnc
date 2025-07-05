@@ -25,7 +25,7 @@ export interface ConnectionConfig {
 export function ConnectionDialog({ onConnect, isConnected }: ConnectionDialogProps) {
   const [config, setConfig] = useState<ConnectionConfig>({
     host: "localhost",
-    port: "5900",
+    port: "8080",
     password: "",
     viewOnly: false,
     shared: true,
