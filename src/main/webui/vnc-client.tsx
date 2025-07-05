@@ -137,21 +137,6 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
     }
   }, [])
 
-  // Auto-connect when sessionId is available
-  useEffect(() => {
-    if (sessionId && !isConnected && !config) {
-      // Auto-connect using the session
-      handleConnect({
-        host: 'localhost', // This will be overridden by wsConfig
-        port: '8080',      // This will be overridden by wsConfig
-        password: '',      // No password needed for WebSocket proxy
-        viewOnly: false,
-        shared: true,
-        quality: 6
-      })
-    }
-  }, [sessionId, isConnected, config, handleConnect])
-
   // Start latency measurement when connected
   useEffect(() => {
     if (!isConnected || !sessionId) {
