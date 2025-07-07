@@ -12,7 +12,6 @@ import { Alert, AlertDescription } from "./components/ui/alert"
 import { AlertCircle } from "lucide-react"
 
 import { latencyService, type LatencyMeasurement } from "./lib/latency-service"
-import { configService, type ConfigResponse } from "./lib/config-service"
 
 interface VNCClientProps {
   username: string
@@ -25,7 +24,6 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
   const [connectionStatus, setConnectionStatus] = useState("Disconnected")
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [config, setConfig] = useState<ConnectionConfig | null>(null)
-  const [wsConfig, setWsConfig] = useState<ConfigResponse | null>(null)
   const [latency, setLatency] = useState<number>()
   const [isLatencyLoading, setIsLatencyLoading] = useState(false)
   const [latencyDetails, setLatencyDetails] = useState<LatencyMeasurement | null>(null)
@@ -39,31 +37,16 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
     setConnectionStatus("Connecting...")
     setConnectionError(null)
     
-    // If we have a sessionId, try to get the WebSocket config for auto-connect
-    if (sessionId) {
-      configService.getConfig(sessionId)
-        .then(config => {
-          // Check if component is still mounted before updating state
-          if (isMountedRef.current) {
-            setWsConfig(config)
-            // Set isConnected to true to trigger VNCCanvas connection
-            // The actual connection state will be managed by VNCCanvas through onConnectionChange
-            setIsConnected(true)
-          }
-        })
-        .catch(error => {
-          // Check if component is still mounted before updating state
-          if (isMountedRef.current) {
-            console.error('Failed to get WebSocket config:', error)
-            setConnectionError('Failed to establish connection. Please try again.')
-            setConnectionStatus("Connection Failed")
-          }
-        })
-    } else {
-      // No sessionId, use manual connection
-      // Set isConnected to true to trigger VNCCanvas connection with manual config
-      setIsConnected(true)
+    // Check if we have a sessionId for connection
+    if (!sessionId) {
+      setConnectionError('No session ID available. Please log in again.')
+      setConnectionStatus("Connection Failed")
+      return
     }
+    
+    // Set isConnected to true to trigger VNCCanvas connection
+    // The actual connection state will be managed by VNCCanvas through onConnectionChange
+    setIsConnected(true)
   }, [sessionId])
 
   const handleDisconnect = useCallback(() => {
@@ -244,7 +227,6 @@ export default function VNCClient({ username, onLogout, sessionId }: VNCClientPr
           port={config?.port}
           password={config?.password}
           sessionId={sessionId}
-          wsConfig={wsConfig}
           onConnectionChange={handleConnectionChange}
           onMouseMove={handleMouseMove}
           onMouseClick={handleMouseClick}
