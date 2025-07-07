@@ -84,9 +84,9 @@ public class VNCAuthResource {
         public SessionResponse(VNCAuthService.VNCSession session) {
             this.valid = true;
             this.message = "Session is valid";
-            this.wsUrl = "/websockify/" + session.sessionId;
-            this.userId = session.userId;
-            this.lastActivity = session.lastActivity.toEpochSecond(java.time.ZoneOffset.UTC) * 1000;
+            this.wsUrl = "/websockify/" + session.getSessionId();
+            this.userId = session.getUserId();
+            this.lastActivity = session.getLastActivity().toEpochSecond(java.time.ZoneOffset.UTC) * 1000;
             this.timestamp = System.currentTimeMillis();
         }
     }
@@ -140,7 +140,7 @@ public class VNCAuthResource {
         VNCAuthService.VNCSession session = authService.getSession(sessionId);
         
         if (session != null) {
-            System.out.println("✅ Session valid: " + sessionId + " (" + session.userId + ")");
+            System.out.println("✅ Session valid: " + sessionId + " (" + session.getUserId() + ")");
             return Uni.createFrom().item(Response.ok(new SessionResponse(session)).build());
         } else {
             System.out.println("❌ Session invalid or expired: " + sessionId);
@@ -170,10 +170,10 @@ public class VNCAuthResource {
                 .collect(java.util.stream.Collectors.toMap(
                     Map.Entry::getKey,
                     entry -> Map.of(
-                        "userId", entry.getValue().userId,
-                        "clientIP", entry.getValue().clientIP,
-                        "createdAt", entry.getValue().createdAt.toString(),
-                        "lastActivity", entry.getValue().lastActivity.toString()
+                        "userId", entry.getValue().getUserId(),
+                        "clientIP", entry.getValue().getClientIP(),
+                        "createdAt", entry.getValue().getCreatedAt().toString(),
+                        "lastActivity", entry.getValue().getLastActivity().toString()
                     )
                 ))
         )).build());

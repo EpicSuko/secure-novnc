@@ -78,7 +78,7 @@ public class VNCConfigResource {
         
         // Get client IP for logging
         String clientIP = getClientIP();
-        System.out.println("✅ Config request authorized for session: " + sessionId + " (" + session.userId + ") from " + clientIP);
+        System.out.println("✅ Config request authorized for session: " + sessionId + " (" + session.getUserId() + ") from " + clientIP);
         
         // Use configured WebSocket settings
         String finalWsHost = wsHost;
