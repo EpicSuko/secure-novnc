@@ -12,6 +12,7 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import com.suko.vnc.security.VNCAuthService;
 
@@ -31,8 +32,8 @@ public class VNCAuthResource {
     RoutingContext context;
     
     public static class AuthRequest {
-        public String username;
-        public String preAuthPassword;
+        private String username;
+        private String preAuthPassword;
         
         // Default constructor for JSON deserialization
         public AuthRequest() {}
@@ -41,19 +42,36 @@ public class VNCAuthResource {
             this.username = username;
             this.preAuthPassword = preAuthPassword;
         }
+        
+        public String getUsername() { return username; }
+        public void setUsername(String username) { this.username = username; }
+        public String getPreAuthPassword() { return preAuthPassword; }
+        public void setPreAuthPassword(String preAuthPassword) { this.preAuthPassword = preAuthPassword; }
+        
+        public boolean isValid() {
+            return !getTrimmedUsername().isEmpty() && 
+                   preAuthPassword != null && !preAuthPassword.trim().isEmpty();
+        }
+        
+        public String getTrimmedUsername() {
+            return username != null ? username.trim() : "";
+        }
     }
     
     public static class AuthResponse {
-        public String sessionId;
-        public String wsUrl;
-        public boolean success;
-        public String message;
-        public String userId;
-        public long timestamp;
+        private final String sessionId;
+        private final String wsUrl;
+        private final boolean success;
+        private final String message;
+        private final String userId;
+        private final long timestamp;
         
         public AuthResponse(boolean success, String message) {
+            this.sessionId = null;
+            this.wsUrl = null;
             this.success = success;
             this.message = message;
+            this.userId = null;
             this.timestamp = System.currentTimeMillis();
         }
         
@@ -65,19 +83,30 @@ public class VNCAuthResource {
             this.message = "Authentication successful";
             this.timestamp = System.currentTimeMillis();
         }
+        
+        // Getters
+        public String getSessionId() { return sessionId; }
+        public String getWsUrl() { return wsUrl; }
+        public boolean isSuccess() { return success; }
+        public String getMessage() { return message; }
+        public String getUserId() { return userId; }
+        public long getTimestamp() { return timestamp; }
     }
     
     public static class SessionResponse {
-        public boolean valid;
-        public String message;
-        public String wsUrl;
-        public String userId;
-        public long lastActivity;
-        public long timestamp;
+        private final boolean valid;
+        private final String message;
+        private final String wsUrl;
+        private final String userId;
+        private final long lastActivity;
+        private final long timestamp;
         
         public SessionResponse(boolean valid, String message) {
             this.valid = valid;
             this.message = message;
+            this.wsUrl = null;
+            this.userId = null;
+            this.lastActivity = 0;
             this.timestamp = System.currentTimeMillis();
         }
         
@@ -89,72 +118,53 @@ public class VNCAuthResource {
             this.lastActivity = session.getLastActivity().toEpochSecond(java.time.ZoneOffset.UTC) * 1000;
             this.timestamp = System.currentTimeMillis();
         }
+        
+        // Getters
+        public boolean isValid() { return valid; }
+        public String getMessage() { return message; }
+        public String getWsUrl() { return wsUrl; }
+        public String getUserId() { return userId; }
+        public long getLastActivity() { return lastActivity; }
+        public long getTimestamp() { return timestamp; }
     }
     
     @POST
     @Path("/authenticate")
     public Uni<Response> authenticate(AuthRequest authRequest) {
-        System.out.println("🔐 Authentication request received");
-        
         // Validate input
-        if (authRequest == null || authRequest.username == null || authRequest.preAuthPassword == null) {
-            System.out.println("❌ Invalid request: missing username or password");
-            return Uni.createFrom().item(Response.status(400)
-                .entity(new AuthResponse(false, "Username and password are required"))
-                .build());
+        if (authRequest == null || !authRequest.isValid()) {
+            return createErrorResponse(400, "Username and password are required");
         }
-        
-        if (authRequest.username.trim().isEmpty() || authRequest.preAuthPassword.trim().isEmpty()) {
-            System.out.println("❌ Invalid request: empty username or password");
-            return Uni.createFrom().item(Response.status(400)
-                .entity(new AuthResponse(false, "Username and password cannot be empty"))
-                .build());
-        }
-        
-        // Get client IP
-        String clientIP = getClientIP();
         
         // Attempt authentication
         String sessionId = authService.authenticateAndCreateSession(
-            authRequest.username.trim(), 
-            authRequest.preAuthPassword, 
-            clientIP
+            authRequest.getTrimmedUsername(), 
+            authRequest.getPreAuthPassword(), 
+            getClientIP()
         );
         
         if (sessionId != null) {
-            System.out.println("✅ Authentication successful for: " + authRequest.username);
-            return Uni.createFrom().item(Response.ok(new AuthResponse(sessionId, authRequest.username)).build());
+            return Uni.createFrom().item(Response.ok(new AuthResponse(sessionId, authRequest.getTrimmedUsername())).build());
         } else {
-            System.out.println("❌ Authentication failed for: " + authRequest.username);
-            return Uni.createFrom().item(Response.status(401)
-                .entity(new AuthResponse(false, "Invalid username or password"))
-                .build());
+            return createErrorResponse(401, "Invalid username or password");
         }
     }
     
     @GET
     @Path("/session/{sessionId}/validate")
     public Uni<Response> validateSession(@PathParam("sessionId") String sessionId) {
-        System.out.println("🔍 Session validation request: " + sessionId);
-        
         VNCAuthService.VNCSession session = authService.getSession(sessionId);
         
         if (session != null) {
-            System.out.println("✅ Session valid: " + sessionId + " (" + session.getUserId() + ")");
             return Uni.createFrom().item(Response.ok(new SessionResponse(session)).build());
         } else {
-            System.out.println("❌ Session invalid or expired: " + sessionId);
-            return Uni.createFrom().item(Response.status(404)
-                .entity(new SessionResponse(false, "Session not found or expired"))
-                .build());
+            return createErrorResponse(404, "Session not found or expired");
         }
     }
     
     @DELETE
     @Path("/session/{sessionId}")
     public Uni<Response> logout(@PathParam("sessionId") String sessionId) {
-        System.out.println("🚪 Logout request: " + sessionId);
-        
         authService.invalidateSession(sessionId);
         return Uni.createFrom().item(Response.ok(new SessionResponse(true, "Session invalidated successfully")).build());
     }
@@ -164,10 +174,10 @@ public class VNCAuthResource {
     public Uni<Response> getActiveSessions() {
         Map<String, VNCAuthService.VNCSession> sessions = authService.getActiveSessions();
         
-        return Uni.createFrom().item(Response.ok(Map.of(
+        Map<String, Object> response = Map.of(
             "activeSessionCount", sessions.size(),
             "sessions", sessions.entrySet().stream()
-                .collect(java.util.stream.Collectors.toMap(
+                .collect(Collectors.toMap(
                     Map.Entry::getKey,
                     entry -> Map.of(
                         "userId", entry.getValue().getUserId(),
@@ -176,7 +186,15 @@ public class VNCAuthResource {
                         "lastActivity", entry.getValue().getLastActivity().toString()
                     )
                 ))
-        )).build());
+        );
+        
+        return Uni.createFrom().item(Response.ok(response).build());
+    }
+    
+    private Uni<Response> createErrorResponse(int status, String message) {
+        return Uni.createFrom().item(Response.status(status)
+            .entity(new AuthResponse(false, message))
+            .build());
     }
     
     private String getClientIP() {
