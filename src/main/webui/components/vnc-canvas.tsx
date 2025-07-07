@@ -51,30 +51,10 @@ export const VNCCanvas = forwardRef<VNCCanvasRef, VNCCanvasProps>(({
     const currentUrl = new URL(window.location.href)
     const protocol = currentUrl.protocol === 'https:' ? 'wss' : 'ws'
     const wsHost = currentUrl.hostname
+    const wsPort = currentUrl.port || (protocol === 'wss' ? '443' : '80')
+    const portSuffix = (wsPort === '443' && protocol === 'wss') || (wsPort === '80' && protocol === 'ws') ? '' : `:${wsPort}`
     
-    // Parse port properly - handle cases where port might be empty string or specific port
-    let wsPort: string
-    if (currentUrl.port) {
-      // Use the explicit port from the URL
-      wsPort = currentUrl.port
-    } else {
-      // Use default ports based on protocol
-      wsPort = protocol === 'wss' ? '443' : '80'
-    }
-    
-    // Build WebSocket URL
-    const wsUrl = `${protocol}://${wsHost}:${wsPort}/websockify/${sessionId}`
-    console.log("Built WebSocket URL from current location:", wsUrl)
-    console.log("URL details:", {
-      original: window.location.href,
-      protocol: currentUrl.protocol,
-      wsProtocol: protocol,
-      hostname: currentUrl.hostname,
-      port: currentUrl.port,
-      wsPort: wsPort,
-      sessionId: sessionId
-    })
-    return wsUrl
+    return `${protocol}://${wsHost}${portSuffix}/websockify/${sessionId}`
   }, [])
 
   // Expose methods and RFB instance to parent components
