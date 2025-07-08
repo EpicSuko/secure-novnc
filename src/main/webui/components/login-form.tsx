@@ -118,13 +118,6 @@ export function LoginForm({ onLogin }: LoginFormProps) {
               )}
             </Button>
           </form>
-
-          <div className="mt-6 text-center text-sm text-muted-foreground dark:text-gray-400">
-            <p>Demo credentials:</p>
-            <p className="font-mono bg-muted dark:bg-gray-800 px-2 py-1 rounded mt-1 dark:text-gray-300">
-              admin / password
-            </p>
-          </div>
         </CardContent>
       </Card>
     </div>

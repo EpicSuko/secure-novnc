@@ -7,12 +7,20 @@ import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+
 import io.quarkus.scheduler.Scheduled;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 
 @ApplicationScoped
 public class VNCAuthService {
+
+    @ConfigProperty(name = "vnc.user.username")
+    String username;
+
+    @ConfigProperty(name = "vnc.user.password")
+    String password;
 
     private final Map<String, VNCSession> activeSessions = new ConcurrentHashMap<>();
     private final Map<String, String> preAuthUsers = new ConcurrentHashMap<>();
@@ -51,10 +59,7 @@ public class VNCAuthService {
 
     @PostConstruct
     public void init() {
-        // Initialize demo users
-        preAuthUsers.put("admin", hashPassword("admin123"));
-        preAuthUsers.put("user1", hashPassword("user1pass"));
-        preAuthUsers.put("demo", hashPassword("demo123"));
+        preAuthUsers.put(username, hashPassword(password));
     }
 
     public String authenticateAndCreateSession(String username, String preAuthPassword, String clientIP) {
