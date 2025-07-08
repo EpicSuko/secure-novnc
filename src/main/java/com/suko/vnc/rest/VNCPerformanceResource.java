@@ -4,16 +4,16 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.eclipse.microprofile.config.inject.ConfigProperty;
-
 import com.suko.vnc.websocket.VNCConnection;
 import com.suko.vnc.websocket.VNCConnectionManager;
 import com.suko.vnc.websocket.VNCPerformanceMonitor;
+import com.suko.vnc.security.VNCAuthService;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
@@ -26,21 +26,31 @@ public class VNCPerformanceResource {
     @Inject
     VNCPerformanceMonitor performanceMonitor;
     
-    @ConfigProperty(name = "vnc.server.host", defaultValue = "localhost")
-    String vncServerHost;
-    
-    @ConfigProperty(name = "vnc.server.port", defaultValue = "5901")
-    int vncServerPort;
+    @Inject
+    VNCAuthService authService;
     
     @GET
     @Produces(MediaType.APPLICATION_JSON)
-    public Response getPerformanceStats() {
+    public Response getPerformanceStats(@QueryParam("sessionId") String sessionId) {
         try {
-            VNCPerformanceMonitor.PerformanceStats stats = performanceMonitor.getPerformanceStats();
-            Map<String, VNCConnection> connections = connectionManager.getActiveConnections();
+            // Validate session
+            if (sessionId == null || sessionId.trim().isEmpty()) {
+                Map<String, String> error = Map.of("error", "Session ID is required");
+                return Response.status(Response.Status.BAD_REQUEST).entity(error).build();
+            }
             
-            // Create detailed connection stats
-            Map<String, Object> connectionDetails = connections.entrySet().stream()
+            VNCAuthService.VNCSession session = authService.getSession(sessionId);
+            if (session == null) {
+                Map<String, String> error = Map.of("error", "Invalid or expired session");
+                return Response.status(Response.Status.UNAUTHORIZED).entity(error).build();
+            }
+            
+            VNCPerformanceMonitor.PerformanceStats stats = performanceMonitor.getPerformanceStats();
+
+            Map<String, VNCConnection> userConnections = getUserConnections(sessionId);
+            
+            // Create detailed connection stats for user's connections only
+            Map<String, Object> connectionDetails = userConnections.entrySet().stream()
                 .collect(Collectors.toMap(
                     Map.Entry::getKey,
                     entry -> {
@@ -65,17 +75,28 @@ public class VNCPerformanceResource {
                     }
                 ));
             
+            // Calculate user-specific stats
+            long userBytesReceived = userConnections.values().stream().mapToLong(conn -> conn.bytesReceived).sum();
+            long userBytesSent = userConnections.values().stream().mapToLong(conn -> conn.bytesSent).sum();
+            long userMessages = userConnections.values().stream().mapToLong(conn -> conn.messageCount).sum();
+            double userAverageLatency = userConnections.values().stream()
+                .mapToDouble(conn -> conn.getAverageLatency())
+                .average()
+                .orElse(0.0);
+            double userThroughput = userConnections.values().stream()
+                .mapToDouble(conn -> conn.getThroughput())
+                .sum();
+            
             Map<String, Object> response = new HashMap<>();
             response.put("timestamp", stats.timestamp);
-            response.put("activeConnections", stats.activeConnections);
+            response.put("userId", session.getUserId());
+            response.put("userConnections", userConnections.size());
             response.put("totalConnections", stats.totalConnections);
-            response.put("totalBytesReceived", stats.totalBytesReceived);
-            response.put("totalBytesSent", stats.totalBytesSent);
-            response.put("totalMessages", stats.totalMessages);
-            response.put("averageLatency", stats.averageLatency);
-            response.put("totalThroughput", stats.totalThroughput);
-            response.put("vncServerHost", vncServerHost);
-            response.put("vncServerPort", vncServerPort);
+            response.put("userBytesReceived", userBytesReceived);
+            response.put("userBytesSent", userBytesSent);
+            response.put("userMessages", userMessages);
+            response.put("userAverageLatency", userAverageLatency);
+            response.put("userThroughput", userThroughput);
             response.put("connections", connectionDetails);
             
             return Response.ok(response).build();
@@ -89,31 +110,57 @@ public class VNCPerformanceResource {
     @GET
     @Path("/summary")
     @Produces(MediaType.TEXT_PLAIN)
-    public Response getPerformanceSummary() {
+    public Response getPerformanceSummary(@QueryParam("sessionId") String sessionId) {
         try {
+            // Validate session
+            if (sessionId == null || sessionId.trim().isEmpty()) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("Session ID is required")
+                    .build();
+            }
+            
+            VNCAuthService.VNCSession session = authService.getSession(sessionId);
+            if (session == null) {
+                return Response.status(Response.Status.UNAUTHORIZED)
+                    .entity("Invalid or expired session")
+                    .build();
+            }
+            
             VNCPerformanceMonitor.PerformanceStats stats = performanceMonitor.getPerformanceStats();
+
+            Map<String, VNCConnection> userConnections = getUserConnections(sessionId);
+            
+            // Calculate user-specific stats
+            long userBytesReceived = userConnections.values().stream().mapToLong(conn -> conn.bytesReceived).sum();
+            long userBytesSent = userConnections.values().stream().mapToLong(conn -> conn.bytesSent).sum();
+            long userMessages = userConnections.values().stream().mapToLong(conn -> conn.messageCount).sum();
+            double userAverageLatency = userConnections.values().stream()
+                .mapToDouble(conn -> conn.getAverageLatency())
+                .average()
+                .orElse(0.0);
+            double userThroughput = userConnections.values().stream()
+                .mapToDouble(conn -> conn.getThroughput())
+                .sum();
             
             String summary = String.format(
-                "VNC Performance Summary\n" +
-                "=======================\n" +
-                "Active Connections: %d\n" +
-                "Total Connections: %d\n" +
-                "Total Bytes Received: %.2f MB\n" +
-                "Total Bytes Sent: %.2f MB\n" +
-                "Total Messages: %d\n" +
-                "Average Latency: %.2f ms\n" +
-                "Total Throughput: %.2f MB/s\n" +
-                "VNC Server: %s:%d\n" +
+                "VNC Performance Summary for User: %s\n" +
+                "=====================================\n" +
+                "User Connections: %d\n" +
+                "Total System Connections: %d\n" +
+                "User Bytes Received: %.2f MB\n" +
+                "User Bytes Sent: %.2f MB\n" +
+                "User Messages: %d\n" +
+                "User Average Latency: %.2f ms\n" +
+                "User Throughput: %.2f MB/s\n" +
                 "Timestamp: %d",
-                stats.activeConnections,
+                session.getUserId(),
+                userConnections.size(),
                 stats.totalConnections,
-                stats.totalBytesReceived / (1024.0 * 1024.0),
-                stats.totalBytesSent / (1024.0 * 1024.0),
-                stats.totalMessages,
-                stats.averageLatency,
-                stats.totalThroughput / (1024.0 * 1024.0),
-                vncServerHost,
-                vncServerPort,
+                userBytesReceived / (1024.0 * 1024.0),
+                userBytesSent / (1024.0 * 1024.0),
+                userMessages,
+                userAverageLatency,
+                userThroughput / (1024.0 * 1024.0),
                 stats.timestamp
             );
             
@@ -124,5 +171,15 @@ public class VNCPerformanceResource {
                 .entity("Failed to get performance summary: " + e.getMessage())
                 .build();
         }
+    }
+
+    private Map<String, VNCConnection> getUserConnections(String sessionId) {
+        Map<String, VNCConnection> allConnections = connectionManager.getActiveConnections();
+        return allConnections.entrySet().stream()
+            .filter(entry -> {
+                VNCConnection conn = entry.getValue();
+                return conn.authSession != null && sessionId.equals(conn.authSession.getSessionId());
+            })
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 } 
