@@ -56,7 +56,11 @@ public class VNCConfigCli implements Runnable {
                     if (port < 1 || port > 65535) {
                         throw new IllegalArgumentException("Port must be between 1 and 65535");
                     }
-                    System.setProperty("quarkus.http.port", parts[1]);
+                    if(cert != null && key != null) {
+                        System.setProperty("quarkus.http.ssl-port", parts[1]);
+                    } else {
+                        System.setProperty("quarkus.http.port", parts[1]);
+                    }
                 } catch (NumberFormatException e) {
                     throw new IllegalArgumentException("Invalid port number: " + parts[1]);
                 }
