@@ -2,8 +2,9 @@ package com.suko.vnc.config;
 
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.Help.Visibility;
 
-@Command(name = "vnc-server", description = "VNC Application", mixinStandardHelpOptions = true)
+@Command(name = "vnc-server", description = "VNC Application", mixinStandardHelpOptions = true, exitCodeOnUsageHelp = 1, exitCodeOnVersionHelp = 1) // we want to exit with help or version is provided
 public class VNCConfigCli implements Runnable {
 
     @Option(names = {"--cert"}, description = "SSL certificate Path", required = false)
@@ -12,19 +13,19 @@ public class VNCConfigCli implements Runnable {
     @Option(names = {"--key"}, description = "SSL key Path", required = false)
     String key;
 
-    @Option(names = {"--listen"}, description = "Host address and port", required = false)
+    @Option(names = {"--listen"}, description = "Host address and port to listen on", required = false, defaultValue = "localhost:8080", showDefaultValue = Visibility.ALWAYS)
     String listen;
 
-    @Option(names = {"--vnc"}, description = "VNC host address and port", required = true)
+    @Option(names = {"--vnc"}, description = "VNC host address and port to connect to", required = true)
     String vnc;
 
-    @Option(names = {"--vnc-password"}, description = "VNC password", required = true)
+    @Option(names = {"--vnc-password"}, description = "Server's VNC password", required = true)
     String vncPassword;
 
-    @Option(names = {"--username"}, description = "Username", required = true)
+    @Option(names = {"--username"}, description = "Username to use for authentication", required = true)
     String username;
 
-    @Option(names = {"--password"}, description = "Password", required = true)
+    @Option(names = {"--password"}, description = "Password to use for authentication", required = true)
     String password;
 
     @Override
