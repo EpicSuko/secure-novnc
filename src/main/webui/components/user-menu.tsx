@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { User, LogOut, Settings } from "lucide-react"
 
 interface UserMenuProps {

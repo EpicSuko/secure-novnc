@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from "react"
 import { Card } from "@/components/ui/card"
 import NoVncClient from "@novnc/novnc/lib/rfb"
-import { ConnectionConfig } from "./connect-button"
 
 interface VNCCanvasProps {
   isConnected: boolean
@@ -33,13 +32,17 @@ export const VNCCanvas = forwardRef<VNCCanvasRef, VNCCanvasProps>(({
   password,
   sessionId,
   onConnectionChange,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onMouseMove,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onMouseClick,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onKeyPress,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const rfbRef = useRef<NoVncClient | null>(null)
   const [connectionStatus, setConnectionStatus] = useState("Disconnected")
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
 
   // Function to parse current URL and build WebSocket URL
@@ -151,7 +154,7 @@ export const VNCCanvas = forwardRef<VNCCanvasRef, VNCCanvasProps>(({
           console.log("Connected to VNC server")
         })
 
-        rfb.addEventListener("disconnect", (e: any) => {
+        rfb.addEventListener("disconnect", (e: CustomEvent) => {
           setConnectionStatus("Disconnected")
           onConnectionChange?.(false)
           console.log("Disconnected from VNC server:", e.detail.clean ? "Clean" : "Unclean")
@@ -162,7 +165,7 @@ export const VNCCanvas = forwardRef<VNCCanvasRef, VNCCanvasProps>(({
           console.log("Credentials required")
         })
 
-        rfb.addEventListener("securityfailure", (e: any) => {
+        rfb.addEventListener("securityfailure", (e: CustomEvent) => {
           setConnectionStatus("Security Failure")
           onConnectionChange?.(false)
           console.error("Security failure:", e.detail)

@@ -7,6 +7,12 @@ export interface LatencyMeasurement {
   timestamp: number
 }
 
+export interface LatencyMessage {
+  type: string
+  clientTimestamp: number
+  serverTimestamp: number
+}
+
 /**
  * Handles WebSocket-based latency measurement with integrated proxy-to-VNC latency fetching
  * Provides complete end-to-end latency measurements by combining:
@@ -153,9 +159,8 @@ class LatencyService {
     }
   }
 
-  private async calculateLatency(pongMessage: any) {
+  private async calculateLatency(pongMessage: LatencyMessage) {
     const clientTimestamp = pongMessage.clientTimestamp
-    const serverTimestamp = pongMessage.serverTimestamp
     const currentTime = Date.now()
     
     // Calculate round-trip time
