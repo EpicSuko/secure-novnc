@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -27,6 +28,7 @@ public class VNCAuthService {
     private final Map<String, Integer> failedAttempts = new ConcurrentHashMap<>();
     private final SecureRandom secureRandom = new SecureRandom();
 
+    @RegisterForReflection
     public static class VNCSession {
         private final String sessionId;
         private final String userId;

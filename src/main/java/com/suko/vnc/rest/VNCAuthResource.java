@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 
 import com.suko.vnc.security.VNCAuthService;
 
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import io.smallrye.mutiny.Uni;
 import io.vertx.ext.web.RoutingContext;
 import jakarta.inject.Inject;
@@ -31,6 +32,7 @@ public class VNCAuthResource {
     @Context
     RoutingContext context;
     
+    @RegisterForReflection
     public static class AuthRequest {
         private String username;
         private String preAuthPassword;
@@ -58,6 +60,7 @@ public class VNCAuthResource {
         }
     }
     
+    @RegisterForReflection
     public static class AuthResponse {
         private final String sessionId;
         private final String wsUrl;
@@ -93,6 +96,7 @@ public class VNCAuthResource {
         public long getTimestamp() { return timestamp; }
     }
     
+    @RegisterForReflection
     public static class SessionResponse {
         private final boolean valid;
         private final String message;
