@@ -7,12 +7,6 @@ export interface LatencyMeasurement {
   timestamp: number
 }
 
-export interface LatencyMessage {
-  type: string
-  clientTimestamp: number
-  serverTimestamp: number
-}
-
 /**
  * Handles WebSocket-based latency measurement with integrated proxy-to-VNC latency fetching
  * Provides complete end-to-end latency measurements by combining:
@@ -47,9 +41,12 @@ class LatencyService {
     if (!this.sessionId) return
 
     try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const host = window.location.host
-      const wsUrl = `${protocol}//${host}/latency/${this.sessionId}`
+      const currentUrl = new URL(window.location.href)
+      const protocol = currentUrl.protocol === 'https:' ? 'wss' : 'ws'
+      const wsHost = currentUrl.hostname
+      const wsPort = currentUrl.port || (protocol === 'wss' ? '443' : '80')
+      const portSuffix = (wsPort === '443' && protocol === 'wss') || (wsPort === '80' && protocol === 'ws') ? '' : `:${wsPort}`
+      const wsUrl = `${protocol}://${wsHost}${portSuffix}/latency/${this.sessionId}`
       
       this.ws = new WebSocket(wsUrl)
       
@@ -159,7 +156,8 @@ class LatencyService {
     }
   }
 
-  private async calculateLatency(pongMessage: LatencyMessage) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async calculateLatency(pongMessage: any) {
     const clientTimestamp = pongMessage.clientTimestamp
     const currentTime = Date.now()
     
